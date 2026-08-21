@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root { font-family: Inter, system-ui, sans-serif; color: #f6f7fb; background: #090b14; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradient(circle at 50% 15%, rgba(52,65,95,.18), transparent 38%), #090b14; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+
+.app-shell { min-height: 100vh; padding: 44px 6vw 70px; }
+.topbar { width: min(1080px, 100%); margin: 0 auto 22px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 12px; color: #b9bdcb; font-size: 15px; font-weight: 800; letter-spacing: .18em; }
+.brand svg { color: #48f0ca; }
+.topbar nav { display: flex; gap: 3px; padding: 4px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: rgba(255,255,255,.02); }
+.topbar nav button, .periods button, .scope button { border: 0; border-radius: 8px; color: #72778a; background: transparent; font-weight: 800; }
+.topbar nav button { padding: 12px 17px; }
+.topbar nav button.active, .periods button.active, .scope button.active { color: #10201d; background: #48f0ca; box-shadow: 0 0 0 1px rgba(72,240,202,.18); }
+
+.toolbar { width: min(1080px, 100%); margin: 0 auto 18px; padding: 16px; display: grid; grid-template-columns: 2fr auto auto; gap: 12px; align-items: end; border: 1px solid rgba(255,255,255,.07); border-radius: 14px; background: rgba(255,255,255,.025); }
+.source-box label { display: block; margin-bottom: 7px; color: #7e8498; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.source-box > div { display: flex; gap: 8px; }
+.source-box input, .toolbar select { min-height: 42px; border: 1px solid rgba(255,255,255,.1); border-radius: 8px; outline: none; color: #e7e9f0; background: #111521; }
+.source-box input { flex: 1; padding: 0 12px; }
+.toolbar select { min-width: 200px; padding: 0 11px; }
+.source-box button { min-height: 42px; padding: 0 18px; border: 0; border-radius: 8px; color: #10201d; background: #48f0ca; font-weight: 800; }
+.periods, .scope { display: flex; gap: 3px; padding: 3px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: rgba(255,255,255,.025); }
+.periods button, .scope button { min-height: 36px; padding: 0 11px; font-size: 11px; }
+.error { grid-column: 1 / -1; padding: 10px 12px; border: 1px solid rgba(255,100,100,.25); border-radius: 8px; color: #ff9d9d; background: rgba(255,80,80,.06); font-size: 12px; }
+
+.stage { width: min(1080px, 100%); margin: 0 auto; }
+.card { position: relative; overflow: hidden; min-height: 1110px; border: 1px solid rgba(255,255,255,.1); border-radius: 18px; background: linear-gradient(145deg, rgba(26,30,45,.96), rgba(12,15,27,.98)); box-shadow: 0 30px 70px rgba(0,0,0,.36), inset 0 0 70px rgba(113,125,170,.035); }
+.card::before { content: ''; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.01) 1px, transparent 1px); background-size: 44px 44px; opacity: .32; }
+.card-glow { position: absolute; width: 520px; height: 520px; left: 50%; top: -260px; transform: translateX(-50%); border-radius: 50%; background: rgba(90,110,165,.12); filter: blur(80px); }
+
+.match-head { position: relative; z-index: 1; min-height: 176px; padding: 34px 76px 30px; display: grid; grid-template-columns: 96px 1fr 96px; gap: 24px; align-items: center; border-bottom: 1px solid rgba(255,255,255,.07); }
+.team-logo { width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.3); border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.08), rgba(255,255,255,.015)); box-shadow: inset 0 0 0 7px rgba(255,255,255,.02), 0 0 0 5px rgba(255,255,255,.018); }
+.team-logo img { width: 65%; height: 65%; object-fit: contain; }
+.match-head > .team-logo:last-child { justify-self: end; }
+.match-title-wrap { text-align: center; }
+.match-title { color: #f6f7fb; font-size: clamp(28px, 3.1vw, 42px); font-weight: 800; letter-spacing: -.04em; }
+.match-title strong { margin: 0 8px; }
+.meta { margin-top: 14px; color: #a7abbd; font-size: 14px; font-weight: 600; letter-spacing: .14em; }
+.meta i { margin: 0 10px; color: #48f0ca; font-style: normal; }
+
+.stats-list { position: relative; z-index: 1; padding: 18px 74px 48px; display: flex; flex-direction: column; gap: 7px; }
+.stat-row { min-height: 44px; padding: 6px 20px; display: grid; grid-template-columns: 1fr 54px minmax(170px, 1.2fr) 54px 1fr; gap: 12px; align-items: center; border: 1px solid rgba(255,255,255,.065); border-radius: 9px; background: linear-gradient(160deg, rgba(255,255,255,.04), rgba(255,255,255,.008)); }
+.stat-row b { font-size: 16px; text-align: center; }
+.winner { color: #fff; }
+.muted { color: #6e7487; }
+.stat-name { color: #b5bac9; font-size: 12px; font-weight: 600; text-align: center; }
+.track { height: 4px; overflow: hidden; border-radius: 3px; background: rgba(255,255,255,.055); }
+.track span { display: block; height: 100%; background: #48f0ca; border-radius: inherit; }
+.track.left { transform: scaleX(-1); }
+.track.right span { opacity: .52; }
+
+.player-head { position: relative; z-index: 1; min-height: 258px; padding: 34px 70px 28px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-bottom: 1px solid rgba(255,255,255,.07); text-align: center; }
+.player-photo, .trophy { width: 96px; height: 96px; margin-bottom: 20px; display: grid; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; background: radial-gradient(circle at 50% 35%, rgba(72,240,202,.14), rgba(255,255,255,.04)); box-shadow: inset 0 0 0 8px rgba(255,255,255,.025), 0 0 0 5px rgba(255,255,255,.025); }
+.player-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center top; }
+.trophy { color: #48f0ca; }
+.player-head h1 { margin: 0; color: #f8f8fb; font-size: 40px; letter-spacing: -.04em; }
+.player-list { position: relative; z-index: 1; padding: 12px 76px 54px; display: flex; flex-direction: column; gap: 6px; }
+.player-row { min-height: 54px; padding: 7px 14px; display: grid; grid-template-columns: 44px 1.6fr 74px 1fr 80px; gap: 15px; align-items: center; border: 1px solid rgba(255,255,255,.065); border-radius: 10px; background: linear-gradient(160deg, rgba(255,255,255,.043), rgba(255,255,255,.008)); }
+.player-row .team-logo { width: 32px; height: 32px; box-shadow: none; }
+.player-row > span { color: #b9bdcb; font-size: 13px; font-weight: 600; }
+.player-row > b { color: #fff; font-size: 18px; text-align: center; }
+.mini-track { height: 4px; overflow: hidden; border-radius: 3px; background: rgba(255,255,255,.055); }
+.mini-track span { display: block; height: 100%; border-radius: inherit; background: #48f0ca; }
+.player-row em { padding: 7px 8px; border-radius: 5px; color: #10201d; background: #48f0ca; font-size: 9px; font-style: normal; font-weight: 800; text-align: center; }
+.leader-row > span { position: relative; display: flex; flex-direction: column; gap: 3px; padding-left: 34px; }
+.leader-row > span strong { position: absolute; left: 0; top: 1px; color: #48f0ca; }
+.leader-row small { color: #696f82; font-size: 10px; }
+
+.empty { min-height: 650px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px; border: 1px solid rgba(255,255,255,.08); border-radius: 18px; color: #687085; background: rgba(255,255,255,.018); text-align: center; }
+.empty svg { color: #48f0ca; }
+.empty h2 { margin: 0; color: #f4f6fb; font-size: 36px; }
+.empty p { max-width: 520px; margin: 0; font-size: 15px; line-height: 1.5; }
+
+@media (max-width: 900px) {
+  .app-shell { padding: 28px 18px 50px; }
+  .topbar { align-items: flex-start; flex-direction: column; }
+  .toolbar { grid-template-columns: 1fr; }
+  .match-head { padding-left: 34px; padding-right: 34px; grid-template-columns: 72px 1fr 72px; }
+  .stats-list, .player-list { padding-left: 24px; padding-right: 24px; }
+  .stat-row { grid-template-columns: 1fr 48px minmax(120px, 1.2fr) 48px 1fr; }
+}
