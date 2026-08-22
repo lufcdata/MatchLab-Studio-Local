@@ -30,7 +30,8 @@ for PORT in 8000 5173; do
 done
 sleep 1
 cd "$BACKEND"
-nohup "$PY" -m uvicorn studio_entry:app --host 127.0.0.1 --port 8000 > /tmp/matchlab-backend.log 2>&1 &
+# Launch the proven standalone SofaScore MatchLab API. Do not import the V2/DuckDB Studio stack at startup.
+nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/matchlab-backend.log 2>&1 &
 BACKEND_PID=$!
 cd "$FRONTEND"
 if [ ! -d node_modules ]; then
@@ -43,7 +44,7 @@ for i in {1..60}; do
  FRONT_OK="$(curl -fsS http://127.0.0.1:5173 2>/dev/null || true)"
  if [ -n "$HEALTH" ] && [ -n "$FRONT_OK" ]; then
   SERVICE="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("service",""))' 2>/dev/null || true)"
-  [ "$SERVICE" = "matchlab-studio-api" ] || { sleep 1; continue; }
+  [ "$SERVICE" = "matchlab-api" ] || { sleep 1; continue; }
   open http://127.0.0.1:5173
   exit 0
  fi
