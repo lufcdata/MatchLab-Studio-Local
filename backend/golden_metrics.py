@@ -29,7 +29,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Accurate Long Passes","sofascore":"Long Balls","match_aliases":["Long balls","Accurate long balls"],"match_keys":["accurateLongBalls"],"player_keys":["accurateLongBalls"]},
     {"label":"Final Third Entries","sofascore":"Final Third Entries","match_aliases":["Final third entries"],"match_keys":["finalThirdEntries"],"player_keys":["finalThirdEntries","entriesIntoFinalThird"]},
     {"label":"Accurate Crosses","sofascore":"Crosses","match_aliases":["Accurate crosses"],"match_keys":["accurateCross","accurateCrosses"],"player_keys":["accurateCross","accurateCrosses"]},
-    {"label":"Ground Duels Won","sofascore":"Ground Duels","match_aliases":["Ground duels"],"match_keys":["groundDuelsPercentage","groundDuelsWon"],"player_keys":["groundDuelWon","groundDuelsWon","groundDuelsWonCount"]},
+    {"label":"Ground Duels Won","sofascore":"Ground Duels","match_aliases":["Ground duels"],"match_keys":["groundDuelsPercentage","groundDuelsWon"],"player_keys":["groundDuelWon","groundDuelsWon","groundDuelsWonCount"],"calculated":"ground_duels_won"},
     {"label":"Aerial Duels Won","sofascore":"Aerial Duels","match_aliases":["Aerial duels"],"match_keys":["aerialDuelsPercentage","aerialDuelsWon"],"player_keys":["aerialWon","aerialDuelsWon"]},
     {"label":"Duels Won","sofascore":"Duels","match_aliases":["Duels won"],"match_keys":["duelWonPercent","duelsWon"],"player_keys":["duelWon","totalDuelsWon"]},
     {"label":"Ball Recoveries","sofascore":"Recoveries","match_aliases":["Ball recoveries","Recoveries"],"match_keys":["ballRecovery"],"player_keys":["ballRecovery"]},
@@ -97,6 +97,15 @@ def _has_participated(stats: dict[str, Any]) -> bool:
     return any(_number(stats.get(key)) is not None for key in participation_keys)
 def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float | None:
     if metric.get("calculated")=="defensive_actions": return _defensive_actions(stats)
+    if metric.get("calculated")=="ground_duels_won":
+        direct=_first_number(stats,metric.get("player_keys",[]))
+        if direct is not None: return direct
+        all_won=_first_number(stats,["duelWon","totalDuelsWon"])
+        aerial_won=_first_number(stats,["aerialWon","aerialDuelsWon"])
+        if all_won is None: return None
+        # SofaScore's duelWon is all duels won. If aerial wins are absent, treating
+        # them as zero is safe for a participating player; clamp guards bad feeds.
+        return max(0.0, all_won - (aerial_won or 0.0))
     if metric.get("calculated")=="big_chances":
         direct=_first_number(stats,metric.get("player_keys",[]))
         if direct is not None: return direct
