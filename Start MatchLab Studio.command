@@ -29,46 +29,32 @@ fi
 
 command -v npm >/dev/null 2>&1 || fail_dialog "Node/npm is required to run MatchLab Studio."
 
-# Cleanly retire previous MatchLab processes. A stale uvicorn process can keep
-# port 8000 alive briefly after SIGTERM, causing the new backend to die on bind.
-free_port(){
-  PORT="$1"
-  PIDS="$(lsof -ti tcp:$PORT 2>/dev/null || true)"
-  if [ -n "$PIDS" ]; then
-    kill $PIDS >/dev/null 2>&1 || true
-    for _ in {1..20}; do
-      [ -z "$(lsof -ti tcp:$PORT 2>/dev/null || true)" ] && break
-      sleep 0.25
-    done
-  fi
-  PIDS="$(lsof -ti tcp:$PORT 2>/dev/null || true)"
-  if [ -n "$PIDS" ]; then
-    kill -9 $PIDS >/dev/null 2>&1 || true
-    for _ in {1..20}; do
-      [ -z "$(lsof -ti tcp:$PORT 2>/dev/null || true)" ] && break
-      sleep 0.25
-    done
-  fi
-  [ -z "$(lsof -ti tcp:$PORT 2>/dev/null || true)" ] || fail_dialog "MatchLab could not free local port $PORT."
+# Do NOT fight other local apps for fixed ports. Pick free localhost ports dynamically.
+find_free_port(){
+  START="$1"
+  END="$2"
+  PORT="$START"
+  while [ "$PORT" -le "$END" ]; do
+    if [ -z "$(lsof -ti tcp:$PORT 2>/dev/null || true)" ]; then
+      echo "$PORT"
+      return 0
+    fi
+    PORT=$((PORT+1))
+  done
+  return 1
 }
 
-free_port 8000
-free_port 5173
+BACKEND_PORT="$(find_free_port 8000 8099 || true)"
+FRONTEND_PORT="$(find_free_port 5173 5273 || true)"
+[ -n "$BACKEND_PORT" ] || fail_dialog "MatchLab could not find a free local backend port."
+[ -n "$FRONTEND_PORT" ] || fail_dialog "MatchLab could not find a free local frontend port."
 
 cd "$BACKEND"
 : > /tmp/matchlab-backend.log
-nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/matchlab-backend.log 2>&1 &
+nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
 BACKEND_PID=$!
 
-# Give uvicorn a genuine startup window before deciding it has died.
 sleep 1
-if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
-  # One automatic retry handles a last-millisecond socket release race.
-  free_port 8000
-  nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/matchlab-backend.log 2>&1 &
-  BACKEND_PID=$!
-  sleep 1
-fi
 if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
   LAST_LINE="$(tail -1 /tmp/matchlab-backend.log 2>/dev/null | tr '"' "'" | cut -c1-220)"
   [ -n "$LAST_LINE" ] || LAST_LINE="The backend process exited before reporting an error."
@@ -79,7 +65,9 @@ cd "$FRONTEND"
 if [ ! -d node_modules ]; then
   npm install >/tmp/matchlab-npm.log 2>&1 || fail_dialog "MatchLab could not install its frontend packages."
 fi
-nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/matchlab-frontend.log 2>&1 &
+: > /tmp/matchlab-frontend.log
+VITE_MATCHLAB_API="http://127.0.0.1:$BACKEND_PORT" nohup npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort > /tmp/matchlab-frontend.log 2>&1 &
+FRONTEND_PID=$!
 
 for i in {1..60}; do
   if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
@@ -87,16 +75,21 @@ for i in {1..60}; do
     [ -n "$LAST_LINE" ] || LAST_LINE="The backend process exited unexpectedly."
     fail_dialog "The MatchLab local backend stopped while starting. Last backend message: $LAST_LINE"
   fi
+  if ! kill -0 "$FRONTEND_PID" >/dev/null 2>&1; then
+    LAST_LINE="$(tail -1 /tmp/matchlab-frontend.log 2>/dev/null | tr '"' "'" | cut -c1-220)"
+    [ -n "$LAST_LINE" ] || LAST_LINE="The frontend process exited unexpectedly."
+    fail_dialog "The MatchLab frontend stopped while starting. Last frontend message: $LAST_LINE"
+  fi
 
-  HEALTH="$(curl -fsS http://127.0.0.1:8000/health 2>/dev/null || true)"
-  FRONT_OK="$(curl -fsS http://127.0.0.1:5173 2>/dev/null || true)"
-  OPENAPI="$(curl -fsS http://127.0.0.1:8000/openapi.json 2>/dev/null || true)"
+  HEALTH="$(curl -fsS "http://127.0.0.1:$BACKEND_PORT/health" 2>/dev/null || true)"
+  FRONT_OK="$(curl -fsS "http://127.0.0.1:$FRONTEND_PORT" 2>/dev/null || true)"
+  OPENAPI="$(curl -fsS "http://127.0.0.1:$BACKEND_PORT/openapi.json" 2>/dev/null || true)"
 
   if [ -n "$HEALTH" ] && [ -n "$FRONT_OK" ] && [ -n "$OPENAPI" ]; then
     SERVICE="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("service",""))' 2>/dev/null || true)"
     ROUTES_OK="$(printf '%s' "$OPENAPI" | "$PY" -c 'import json,sys; p=json.load(sys.stdin).get("paths",{}); required=["/matches/import-sofascore","/matches/{event_id}","/matches/{event_id}/period-capabilities","/matches/{event_id}/studio-match-stats","/canonical/metrics"]; print("yes" if all(x in p for x in required) else "no")' 2>/dev/null || echo no)"
     if [ "$SERVICE" = "matchlab-api" ] && [ "$ROUTES_OK" = "yes" ]; then
-      open http://127.0.0.1:5173
+      open "http://127.0.0.1:$FRONTEND_PORT"
       exit 0
     fi
   fi
