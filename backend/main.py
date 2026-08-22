@@ -195,4 +195,4 @@ def player_image(player_slug:str):
                     crest=_find_asset(pl["team"],TEAM_ASSET_ROOTS)
                     if crest:return FileResponse(crest)
         except Exception:pass
-    raise HTTPException(404,"No approved local player image or club crest is available.)
+    raise HTTPException(404,"No approved local player image or club crest is available.")
