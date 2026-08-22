@@ -5,6 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#090b14" />
     <title>Matchday Studio</title>
+    <style>
+      /* Supplied player photos: 90% of the original 108px placeholder, no placeholder chrome. */
+      .player-badge.player-badge--photo {
+        width: 108px !important;
+        height: 108px !important;
+        margin: 0 auto 12px !important;
+        display: grid !important;
+        place-items: center !important;
+        overflow: visible !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      .player-badge.player-badge--photo img {
+        width: 90% !important;
+        height: 90% !important;
+        display: block !important;
+        object-fit: contain !important;
+        object-position: center !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
