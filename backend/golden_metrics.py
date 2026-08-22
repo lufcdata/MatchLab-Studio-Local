@@ -15,7 +15,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Shots On-Target","sofascore":"Shots on target","match_keys":["shotsOnGoal","shotsOnTarget"],"player_keys":["onTargetScoringAttempt","shotsOnTarget"]},
     {"label":"Shots Outside Box","sofascore":"Shots outside box","match_keys":["totalShotsOutsideBox","shotsOutsideBox"],"player_keys":["shotFromOutsideTheBox","shotsOutsideBox","shotsFromOutsideTheBox","totalShotsOutsideBox"]},
     {"label":"Shots Inside The Box","sofascore":"Shots inside box","match_aliases":["Shots inside the box","Shots from inside box","Shots from inside the box"],"match_keys":["totalShotsInsideBox","shotsInsideBox"],"player_keys":["shotFromInsideTheBox","shotsInsideBox","shotsFromInsideTheBox","totalShotsInsideBox"]},
-    {"label":"Big Chances","sofascore":"Big Chances","match_aliases":["Big chances"],"match_keys":["bigChanceCreated","bigChances"],"player_keys":["bigChances","bigChance","bigChanceCreated"],"default_zero":True},
+    {"label":"Big Chances","sofascore":"Big Chances","match_aliases":["Big chances"],"match_keys":["bigChanceCreated","bigChances"],"player_keys":["bigChances","bigChance"],"calculated":"big_chances","default_zero":True},
     {"label":"Big Chances Created","sofascore":"Big Chances Created","match_aliases":["Big chances created"],"match_keys":["bigChanceCreated","bigChancesCreated"],"player_keys":["bigChanceCreated","bigChancesCreated"],"default_zero":True},
     {"label":"Big Chances Missed","sofascore":"Big Chances Missed","match_aliases":["Big chances missed"],"match_keys":["bigChanceMissed","bigChancesMissed"],"player_keys":["bigChanceMissed","bigChancesMissed"],"default_zero":True},
     {"label":"Chances Created","sofascore":"Key Passes","match_aliases":["Key passes","Key Pass","Chances created"],"match_keys":["keyPasses","keyPass","chancesCreated"],"player_keys":["keyPass","keyPasses","chancesCreated"]},
@@ -34,7 +34,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Duels Won","sofascore":"Duels","match_aliases":["Duels won"],"match_keys":["duelWonPercent","duelsWon"],"player_keys":["duelWon","totalDuelsWon"]},
     {"label":"Ball Recoveries","sofascore":"Recoveries","match_aliases":["Ball recoveries","Recoveries"],"match_keys":["ballRecovery"],"player_keys":["ballRecovery"]},
     {"label":"Successful Take-Ons","sofascore":"Dribbles","match_aliases":["Successful dribbles","Dribbles"],"match_keys":["dribblesPercentage","successfulDribbles"],"player_keys":["wonContest","successfulDribbles"]},
-    {"label":"Tackles Won","sofascore":"Tackles Won","match_aliases":["Tackles won"],"match_keys":["wonTacklePercent","wonTackle","tacklesWon"],"player_keys":["wonTackle","tacklesWon","totalTackle"]},
+    {"label":"Tackles Won","sofascore":"Tackles Won","match_aliases":["Tackles won"],"match_keys":["wonTacklePercent","wonTackle","tacklesWon"],"player_keys":["wonTackle","tacklesWon"]},
     {"label":"Interceptions","sofascore":"Interceptions","match_keys":["interceptionWon","interceptions"],"player_keys":["interceptionWon","interceptions"]},
     {"label":"Clearances","sofascore":"Clearances","match_keys":["totalClearance","clearances"],"player_keys":["totalClearance","clearances"]},
     {"label":"Fouls","sofascore":"Fouls","match_keys":["fouls"],"player_keys":["fouls"]},
@@ -97,6 +97,13 @@ def _has_participated(stats: dict[str, Any]) -> bool:
     return any(_number(stats.get(key)) is not None for key in participation_keys)
 def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float | None:
     if metric.get("calculated")=="defensive_actions": return _defensive_actions(stats)
+    if metric.get("calculated")=="big_chances":
+        direct=_first_number(stats,metric.get("player_keys",[]))
+        if direct is not None: return direct
+        scored=_first_number(stats,["bigChanceScored","bigChancesScored"])
+        missed=_first_number(stats,["bigChanceMissed","bigChancesMissed"])
+        if scored is not None or missed is not None: return (scored or 0.0)+(missed or 0.0)
+        return 0.0 if metric.get("default_zero") and _has_participated(stats) else None
     for key in metric.get("player_keys",[]):
         value=_number(stats.get(key))
         if value is not None: return value
