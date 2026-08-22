@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 TEAM_ASSET_ROOTS = (ROOT / "assets" / "team_logos", ROOT / "assets" / "club_logos")
 PLAYER_ASSET_ROOTS = (ROOT / "assets" / "player_images", ROOT / "assets" / "players")
 
-app = FastAPI(title="MatchLab API", version="4.0.0-self-contained")
+app = FastAPI(title="MatchLab API", version="4.0.1-self-contained")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 class ImportRequest(BaseModel):
@@ -68,6 +69,8 @@ def _load(event_id: str) -> dict[str, Any]:
 def _match(payload: dict[str, Any]) -> dict[str, Any]:
     e = payload["basic"].get("event", payload["basic"])
     hs = e.get("homeScore", {}) or {}; aws = e.get("awayScore", {}) or {}
+    timestamp = e.get("startTimestamp")
+    date_text = datetime.fromtimestamp(timestamp).strftime("%d %B %Y") if timestamp else ""
     return {
         "event_id": str(e.get("id", "")),
         "home_name": (e.get("homeTeam", {}) or {}).get("name", "Home"),
@@ -75,7 +78,7 @@ def _match(payload: dict[str, Any]) -> dict[str, Any]:
         "home_score": str(hs.get("display", hs.get("current", ""))),
         "away_score": str(aws.get("display", aws.get("current", ""))),
         "tournament": (((e.get("tournament", {}) or {}).get("uniqueTournament", {}) or {}).get("name") or (e.get("tournament", {}) or {}).get("name", "")),
-        "date_text": "",
+        "date_text": date_text,
     }
 
 
@@ -107,6 +110,50 @@ def _period_rows(payload: dict[str, Any], period: str) -> list[dict[str, Any]]:
     return rows
 
 
+def _metric_by_label(label: str) -> dict[str, Any] | None:
+    return next((m for m in METRICS if m["label"] == label), None)
+
+
+def _sum_player_metric(payload: dict[str, Any], metric: dict[str, Any], side: str) -> float | None:
+    values: list[float] = []
+    for p in _players(payload):
+        if p["side"] != side:
+            continue
+        value = player_metric_value(p["stats"], metric)
+        if value is not None:
+            values.append(float(value))
+    return sum(values) if values else None
+
+
+def _pass_accuracy_from_players(payload: dict[str, Any], side: str) -> float | None:
+    successful = _metric_by_label("Successful Passes")
+    total = _metric_by_label("Total Passes")
+    if not successful or not total:
+        return None
+    good = _sum_player_metric(payload, successful, side)
+    attempts = _sum_player_metric(payload, total, side)
+    if good is None or not attempts:
+        return None
+    return good / attempts * 100.0
+
+
+def _full_match_player_fallback(payload: dict[str, Any], metric: dict[str, Any], side: str) -> float | None:
+    """Fill a genuinely missing full-match team value from the same SofaScore player data.
+
+    Raw match-page values always win. This fallback is only for additive Golden
+    metrics that SofaScore exposes in the lineup/player statistics rather than the
+    match-statistics block. Possession and Corners are deliberately not inferred.
+    """
+    label = metric["label"]
+    if label == "Pass Accuracy":
+        return _pass_accuracy_from_players(payload, side)
+    if label in {"Possession", "Corners"}:
+        return None
+    if not metric.get("player_keys"):
+        return None
+    return _sum_player_metric(payload, metric, side)
+
+
 def _asset_stem(path: Path) -> str:
     return re.sub(r"-(icon|icon-v2|icon-2|png|logo|crest|badge|player)$", "", _slug(path.stem))
 
@@ -121,7 +168,7 @@ def _find_asset(wanted: str, roots: tuple[Path,...]) -> Path | None:
     return None
 
 @app.get("/health")
-def health(): return {"ok":True,"service":"matchlab-api","runtime":"self-contained"}
+def health(): return {"ok":True,"service":"matchlab-api","runtime":"self-contained","version":"4.0.1"}
 
 @app.post("/matches/import-sofascore")
 def import_sofascore(req: ImportRequest):
@@ -154,7 +201,15 @@ def match_stats(event_id: str, period: str=Query("full")):
         home[key]=_number(row.get("home_value")) if row else None; away[key]=_number(row.get("away_value")) if row else None
         if row and home[key] is None: home[key]=_number(row.get("home"))
         if row and away[key] is None: away[key]=_number(row.get("away"))
-    if period=="full": home["goals"]=_number(m["home_score"]); away["goals"]=_number(m["away_score"])
+        if period == "full":
+            if home[key] is None: home[key]=_full_match_player_fallback(payload, metric, "home")
+            if away[key] is None: away[key]=_full_match_player_fallback(payload, metric, "away")
+    if period=="full":
+        home["goals"]=_number(m["home_score"]); away["goals"]=_number(m["away_score"])
+        # Golden MatchLab rule: team Pass Accuracy = Successful Passes / Total Passes.
+        for values in (home, away):
+            if values.get("pass_accuracy") is None and values.get("successful_passes") is not None and values.get("total_passes"):
+                values["pass_accuracy"] = values["successful_passes"] / values["total_passes"] * 100.0
     return {"event_id":event_id,"canonical_match_id":event_id,"period":period,"match":{"match_id":event_id,"date":m["date_text"],"home_team_id":_slug(m["home_name"]),"home_team":m["home_name"],"away_team_id":_slug(m["away_name"]),"away_team":m["away_name"],"home_score":m["home_score"],"away_score":m["away_score"]},"home":home,"away":away,"availability":{"missing_fields":[k for k in home if home[k] is None or away[k] is None]}}
 
 @app.get("/matches/{event_id}/players/{player_id}")
