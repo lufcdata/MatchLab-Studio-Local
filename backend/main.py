@@ -36,6 +36,21 @@ def _number(value: Any) -> float | None:
     text = str(value).strip().replace(",", "").rstrip("%").strip()
     try: return float(text)
     except ValueError: return None
+def _fraction_numerator(value: Any) -> float | None:
+    if value is None: return None
+    m=re.match(r"^\s*([\d,.]+)\s*/\s*[\d,.]+",str(value))
+    return _number(m.group(1)) if m else None
+def _match_stat_value(metric: dict[str, Any], row: dict[str, Any] | None, side: str) -> float | None:
+    if not row: return None
+    # SofaScore ratio rows often expose a percentage as homeValue/awayValue while
+    # MatchLab's labels intentionally mean the successful/won COUNT. Use the
+    # numerator from strings such as "7/12 (58%)" for those count metrics.
+    ratio_count_labels={"Accurate Long Passes","Accurate Crosses","Ground Duels Won","Aerial Duels Won","Duels Won","Successful Take-Ons","Tackles Won"}
+    if metric["label"] in ratio_count_labels:
+        numerator=_fraction_numerator(row.get(side))
+        if numerator is not None: return numerator
+    value=_number(row.get(f"{side}_value"))
+    return _number(row.get(side)) if value is None else value
 def _event_id(source: str) -> str:
     source = source.strip()
     if source.isdigit(): return source
@@ -142,9 +157,7 @@ def match_stats(event_id:str,period:str=Query("full")):
     if period not in {"full","first_half","second_half"}:raise HTTPException(400,"Invalid period")
     payload=_load(event_id);m=_match(payload);by={r["name"]:r for r in _period_rows(payload,period)};home={};away={}
     for metric in METRICS:
-        key=metric_key(metric["label"]);row=by.get(metric["label"]);home[key]=_number(row.get("home_value")) if row else None;away[key]=_number(row.get("away_value")) if row else None
-        if row and home[key] is None:home[key]=_number(row.get("home"))
-        if row and away[key] is None:away[key]=_number(row.get("away"))
+        key=metric_key(metric["label"]);row=by.get(metric["label"]);home[key]=_match_stat_value(metric,row,"home");away[key]=_match_stat_value(metric,row,"away")
         if period!="full" and metric["label"]=="Possession Lost":home[key]=None;away[key]=None;continue
         if period=="full":
             if metric["label"]=="Possession Lost":home[key]=_possession_lost_from_players(payload,"home");away[key]=_possession_lost_from_players(payload,"away")
