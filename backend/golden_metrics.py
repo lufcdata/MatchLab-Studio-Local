@@ -44,7 +44,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Corners","sofascore":"Corner Kicks","match_aliases":["Corner kicks"],"match_keys":["cornerKicks","corners"],"player_keys":[]},
     {"label":"Saves","sofascore":"Goalkeeper Saves","match_aliases":["Goalkeeper saves"],"match_keys":["goalkeeperSaves","saves"],"player_keys":["saves"]},
     {"label":"Assists","sofascore":"Assists","match_keys":["assists"],"player_keys":["goalAssist","assists"]},
-    {"label":"Penalties Won","sofascore":"Penalties Won","match_aliases":["Penalties won"],"match_keys":["penaltiesWon","penaltyWon"],"player_keys":["penaltyWon","penaltiesWon"]},
+    {"label":"Penalties Won","sofascore":"Penalties Won","match_aliases":["Penalties won","Penalty won","Penalty awarded","Penalties awarded"],"match_keys":["penaltiesWon","penaltyWon","penaltyAwarded","penaltiesAwarded"],"player_keys":["penaltyWon","penaltiesWon","penaltyAwarded","penaltiesAwarded"],"default_zero":True},
     {"label":"Saves From Inside Box","sofascore":"Saves From Inside Box","match_aliases":["Saves from inside box","Saves inside box"],"match_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"],"player_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"]},
     {"label":"High Claims","sofascore":"High Claims","match_aliases":["High claims"],"match_keys":["highClaims","goodHighClaim"],"player_keys":["highClaims","goodHighClaim"],"default_zero":True},
     {"label":"Red Cards","sofascore":"Red Cards","match_aliases":["Red cards"],"match_keys":["redCards"],"player_keys":["redCards","redCard","directRedCards"]},
@@ -104,6 +104,13 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
         value = _number(stats.get(key))
         if value is not None:
             return value
+    if metric.get("label") == "Defensive Actions":
+        accepted = {"def contribution", "def contributions", "defensive contribution", "defensive contributions", "defensive actions"}
+        for key, raw_value in stats.items():
+            if _norm(key) in accepted:
+                value = _number(raw_value)
+                if value is not None:
+                    return value
     if metric.get("label") == "Pass Accuracy":
         accurate = _number(stats.get("accuratePass"))
         if accurate is None:
