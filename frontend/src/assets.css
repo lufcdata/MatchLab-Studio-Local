@@ -29,7 +29,7 @@
   display: block;
 }
 
-/* Player portrait: 90% of the old 108px placeholder, with all placeholder chrome removed. */
+/* Player portrait: 15% larger than the previous 90% treatment, with all placeholder chrome removed. */
 .player-badge--photo {
   width: 108px;
   height: 108px;
@@ -45,8 +45,8 @@
   justify-content: center;
 }
 .player-badge--photo img {
-  width: 90%;
-  height: 90%;
+  width: 103.5%;
+  height: 103.5%;
   object-fit: contain;
   object-position: center;
   display: block;
