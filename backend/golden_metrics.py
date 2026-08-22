@@ -39,7 +39,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Clearances","sofascore":"Clearances","match_keys":["totalClearance","clearances"],"player_keys":["totalClearance","clearances"]},
     {"label":"Fouls","sofascore":"Fouls","match_keys":["fouls"],"player_keys":["fouls"]},
     {"label":"Fouled","sofascore":"Was Fouled","match_aliases":["Was fouled"],"match_keys":["wasFouled"],"player_keys":["wasFouled"]},
-    {"label":"Possession Lost","sofascore":"Possession Lost","match_aliases":["Possession lost"],"match_keys":["possessionLost","dispossessed"],"player_keys":["possessionLostCtrl","possessionLost"]},
+    {"label":"Possession Lost","sofascore":"Possession Lost","match_aliases":["Possession lost"],"match_keys":["possessionLost"],"player_keys":["possessionLostCtrl","possessionLost"]},
     {"label":"Corners","sofascore":"Corner Kicks","match_aliases":["Corner kicks"],"match_keys":["cornerKicks","corners"],"player_keys":[]},
     {"label":"Saves","sofascore":"Goalkeeper Saves","match_aliases":["Goalkeeper saves"],"match_keys":["goalkeeperSaves","saves"],"player_keys":["saves"]},
     {"label":"Assists","sofascore":"Assists","match_keys":["assists"],"player_keys":["goalAssist","assists"]},
