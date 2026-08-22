@@ -23,10 +23,7 @@ class GoldenMetricAuditTests(unittest.TestCase):
     def test_every_player_metric_has_source_or_calculation(self):
         for metric in METRICS:
             if metric.get("player_keys"):
-                self.assertTrue(
-                    metric.get("player_keys") or metric.get("calculated"),
-                    f"{metric['label']} has no player source",
-                )
+                self.assertTrue(metric.get("player_keys") or metric.get("calculated"), f"{metric['label']} has no player source")
 
     def test_frontend_uses_runtime_golden_catalogue_only(self):
         source = APP_TSX.read_text()
@@ -44,18 +41,21 @@ class GoldenMetricAuditTests(unittest.TestCase):
 
     def test_player_big_chances_are_scored_plus_missed_not_created(self):
         metric = self.metric("Big Chances")
-        stats = {
-            "minutesPlayed": 90,
-            "bigChanceScored": 2,
-            "bigChanceMissed": 1,
-            "bigChanceCreated": 5,
-        }
+        stats = {"minutesPlayed": 90, "bigChanceScored": 2, "bigChanceMissed": 1, "bigChanceCreated": 5}
         self.assertEqual(player_metric_value(stats, metric), 3.0)
 
     def test_tackles_won_never_falls_back_to_total_tackles(self):
         metric = self.metric("Tackles Won")
         self.assertEqual(player_metric_value({"minutesPlayed": 90, "wonTackle": 2, "totalTackle": 5}, metric), 2.0)
         self.assertIsNone(player_metric_value({"minutesPlayed": 90, "totalTackle": 5}, metric))
+
+    def test_ground_duels_won_prefers_direct_then_derives_from_all_minus_aerial(self):
+        metric = self.metric("Ground Duels Won")
+        self.assertEqual(player_metric_value({"groundDuelWon": 6, "duelWon": 10, "aerialWon": 3}, metric), 6.0)
+        self.assertEqual(player_metric_value({"duelWon": 10, "aerialWon": 3}, metric), 7.0)
+        self.assertEqual(player_metric_value({"duelWon": 4}, metric), 4.0)
+        self.assertEqual(player_metric_value({"duelWon": 2, "aerialWon": 3}, metric), 0.0)
+        self.assertIsNone(player_metric_value({}, metric))
 
     def test_penalties_won_and_red_cards_zero_fallback_requires_participation(self):
         played = {"minutesPlayed": 90, "touches": 42}
@@ -76,24 +76,13 @@ class GoldenMetricAuditTests(unittest.TestCase):
 
     def test_defensive_actions_matches_golden_formula(self):
         metric = self.metric("Defensive Actions")
-        stats = {
-            "totalTackle": 2,
-            "interceptionWon": 1,
-            "blockedScoringAttempt": 1,
-            "totalClearance": 4,
-            "ballRecovery": 5,
-            "aerialWon": 3,
-            "fouls": 2,
-        }
+        stats = {"totalTackle": 2, "interceptionWon": 1, "blockedScoringAttempt": 1, "totalClearance": 4, "ballRecovery": 5, "aerialWon": 3, "fouls": 2}
         self.assertEqual(player_metric_value(stats, metric), 18.0)
         self.assertIsNone(player_metric_value({}, metric))
 
     def test_pass_accuracy_derives_from_pass_counts(self):
         metric = self.metric("Pass Accuracy")
-        self.assertAlmostEqual(
-            player_metric_value({"accuratePass": 37, "totalPass": 41}, metric),
-            37 / 41 * 100,
-        )
+        self.assertAlmostEqual(player_metric_value({"accuratePass": 37, "totalPass": 41}, metric), 37 / 41 * 100)
         self.assertIsNone(player_metric_value({"accuratePass": 0, "totalPass": 0}, metric))
 
     def test_shared_number_formatting(self):
