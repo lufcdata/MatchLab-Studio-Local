@@ -20,7 +20,31 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
-# Install ONLY the user's approved local imagery packs. No SofaScore imagery is downloaded.
+# Use the already-working local canonical database. The GitHub backend clone intentionally does not contain football.duckdb.
+TARGET_DB="$BACKEND_REPO/data/football.duckdb"
+mkdir -p "$(dirname "$TARGET_DB")"
+DB_SOURCE=""
+for candidate in \
+  "$HOME/Downloads/MatchLab/data/football.duckdb" \
+  "$HOME/Downloads/MatchLab-Latest/data/football.duckdb" \
+  "$HOME/Downloads/Analysis-App-matchlab-v2-web/data/football.duckdb" \
+  "$HOME/Downloads/Analysis-App-feature-sofascore-social-graphics-v1/data/football.duckdb"; do
+  if [ -f "$candidate" ] && [ -s "$candidate" ]; then
+    DB_SOURCE="$candidate"
+    break
+  fi
+done
+
+if [ -z "$DB_SOURCE" ]; then
+  osascript -e 'display dialog "MatchLab could not find the working local football.duckdb database. Nothing was changed. Open ChatGPT and say: launcher cannot find the canonical database." buttons {"OK"} default button "OK" with icon stop'
+  exit 1
+fi
+
+# A symlink keeps the Studio on the same working database instead of creating another stale copy.
+rm -f "$TARGET_DB"
+ln -s "$DB_SOURCE" "$TARGET_DB"
+
+# Install ONLY the user's approved local imagery packs. No SofaScore imagery is downloaded or rendered.
 PLAYER_ZIP="$HOME/Downloads/2026 27 Leeds Players.zip"
 CLUB_ZIP="$HOME/Downloads/CLUB APP LOGOS.zip"
 PLAYER_ASSETS="$BACKEND_REPO/assets/player_images"
