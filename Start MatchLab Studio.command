@@ -16,6 +16,15 @@ else
   git -C "$BACKEND_REPO" checkout -B matchlab-v2-web origin/matchlab-v2-web >/dev/null 2>&1
 fi
 
+# GOLDEN METRIC AUTHORITY: MatchLab-Studio-Local/backend/golden_metrics.py
+# The backend repository supplies runtime plumbing only. Its metric definitions are
+# deliberately overwritten locally on every launch so Analysis-App is NOT the
+# source of truth for MatchLab metrics.
+GOLDEN_METRICS="$STUDIO_ROOT/backend/golden_metrics.py"
+LEGACY_METRICS="$BACKEND_REPO/sofascore_social_graphics/metrics.py"
+[ -f "$GOLDEN_METRICS" ] || fail_dialog "MatchLab Golden metrics file is missing. Please Fetch/Pull the latest MatchLab Studio first."
+/bin/cp -f "$GOLDEN_METRICS" "$LEGACY_METRICS"
+
 # Wire in the exact MatchLab crests/player images supplied by the user.
 # No SofaScore/FPL/third-party imagery is downloaded here.
 TEAM_ASSET_DIR="$BACKEND_REPO/assets/team_logos"
