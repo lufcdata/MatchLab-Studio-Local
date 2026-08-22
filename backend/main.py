@@ -227,6 +227,11 @@ def match_stats(event_id: str, period: str=Query("full")):
         home[key]=_number(row.get("home_value")) if row else None; away[key]=_number(row.get("away_value")) if row else None
         if row and home[key] is None: home[key]=_number(row.get("home"))
         if row and away[key] is None: away[key]=_number(row.get("away"))
+        if period != "full" and metric["label"] == "Possession Lost":
+            # SofaScore's half-level match row is the narrower dispossessed concept,
+            # not MatchLab's Golden player-summed possessionLostCtrl definition.
+            home[key]=None; away[key]=None
+            continue
         if period == "full":
             if metric["label"] == "Possession Lost":
                 home[key]=_possession_lost_from_players(payload, "home")
