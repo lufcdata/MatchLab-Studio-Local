@@ -26,11 +26,19 @@ jobs:
       - name: Build
         working-directory: frontend
         run: npm run build
-      - name: Verify locked 33-stat contract
+      - name: Verify exact locked 33-stat contract
         working-directory: frontend
         run: |
-          count=$(grep -c "{key:'" src/App.tsx)
-          if [ "$count" -lt 33 ]; then
-            echo "Expected the 33-stat Matchday Studio contract in App.tsx"
-            exit 1
-          fi
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          source = Path('src/App.tsx').read_text()
+          match = re.search(r'const MATCH_FIELDS: StatDef\[\] = \[(.*?)\];', source, re.S)
+          if not match:
+              raise SystemExit('MATCH_FIELDS contract not found')
+          count = len(re.findall(r"\{key:'", match.group(1)))
+          if count != 33:
+              raise SystemExit(f'Expected exactly 33 Match Stats; found {count}')
+          print('Frontend Match Stats contract: 33/33')
+          PY
