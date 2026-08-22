@@ -52,6 +52,24 @@
   display: block;
 }
 
+/* Player Stats + Leaders rows: remove the old circular logo placeholder and let the real crest occupy the same 32px footprint. */
+.player-stat-club {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.player-stat-club img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+}
+
 /* Minutes Played stays visible and locked at the head of Player Stats. */
 .player-stat-row--locked {
   border-color: rgba(72,240,202,.18);
@@ -71,19 +89,35 @@
   letter-spacing: .1em;
 }
 
-/* Shared footer treatment for Match Stats, Player Stats and Metric Leaders. */
-.graphic-footer .footer-spacer {
+/* Shared footer treatment for Match Stats, Player Stats and Metric Leaders. Direct PNGs are preferred for crisp raster output. */
+.graphic-footer .footer-left {
   width: 120px;
   height: 46px;
   flex: 0 0 120px;
-  background: url('/logo-rose.svg') left center / 46px 46px no-repeat;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
-.graphic-footer .footer-page img {
-  content: url('/logo-strap.svg');
+.graphic-footer .footer-rose {
+  width: 46px;
+  height: 46px;
+  object-fit: contain;
+  display: block;
+  image-rendering: auto;
+}
+.graphic-footer .footer-page {
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.graphic-footer .footer-strap {
   width: 120px;
   height: 36px;
   object-fit: contain;
+  display: block;
   opacity: 1;
+  image-rendering: auto;
 }
 
 @media (max-width: 620px) {
