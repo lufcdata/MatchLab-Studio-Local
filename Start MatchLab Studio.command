@@ -27,7 +27,10 @@ if [ ! -x "$PY" ]; then
   "$SYSTEM_PY" -m venv "$VENV" || fail_dialog "MatchLab could not create its local Python environment."
 fi
 
-if ! "$PY" -c 'import fastapi, uvicorn, requests, curl_cffi, PIL' >/dev/null 2>&1; then
+# Check every runtime import the Studio backend actually needs. In particular,
+# studio_main imports v2.database at startup, so DuckDB must exist even though
+# the launcher no longer requires a pre-existing football.duckdb file.
+if ! "$PY" -c 'import fastapi, uvicorn, duckdb, requests, curl_cffi, PIL' >/dev/null 2>&1; then
   "$PY" -m pip install --upgrade pip >/tmp/matchlab-pip.log 2>&1
   "$PY" -m pip install -r "$BACKEND/requirements.txt" >>/tmp/matchlab-pip.log 2>&1 || fail_dialog "MatchLab could not install its local backend requirements."
 fi
@@ -43,8 +46,7 @@ mkdir -p "$PLAYER_ASSETS" "$TEAM_ASSETS"
 
 command -v npm >/dev/null 2>&1 || fail_dialog "Node/npm is required to run the MatchLab Studio frontend."
 
-# Clear anything already occupying the Studio ports. This prevents the launcher
-# accidentally validating an older backend process left running from a previous build.
+# Clear anything already occupying the Studio ports so we only validate the fresh process.
 for PORT in 8000 5173; do
   PIDS="$(lsof -ti tcp:$PORT 2>/dev/null || true)"
   [ -z "$PIDS" ] || kill $PIDS >/dev/null 2>&1 || true
@@ -62,7 +64,6 @@ fi
 nohup npm run dev -- --host 127.0.0.1 --port 5173 > /tmp/matchlab-frontend.log 2>&1 &
 
 for i in {1..60}; do
-  # If our new backend died, fail rather than talking to some stale process.
   if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
     fail_dialog "The MatchLab local backend stopped while starting. Nothing else was opened."
   fi
@@ -78,7 +79,6 @@ for i in {1..60}; do
     COUNT="$(printf '%s' "$METRICS_JSON" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("match_stats_count",-1))' 2>/dev/null || echo -1)"
     [ "$COUNT" = "33" ] || fail_dialog "MatchLab refused to open because the backend did not expose the locked 33-stat contract."
 
-    # The app is healthy. Open Studio immediately; match import remains local and happens through the app.
     open http://127.0.0.1:5173
     exit 0
   fi
