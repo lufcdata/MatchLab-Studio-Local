@@ -166,6 +166,20 @@ def _possession_lost_from_players(payload: dict[str, Any], side: str) -> float |
     return sum(values) if values else None
 
 
+def _ordinal(rank: int) -> str:
+    if 10 <= rank % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1:"st",2:"nd",3:"rd"}.get(rank % 10, "th")
+    return f"{rank}{suffix}"
+
+
+def _rank_label(rank: int, joint: bool) -> str:
+    if rank == 1:
+        return f"⭐ {'J-' if joint else ''}1st"
+    return f"{'J-' if joint else ''}{_ordinal(rank)}"
+
+
 def _asset_stem(path: Path) -> str:
     return re.sub(r"-(icon|icon-v2|icon-2|png|logo|crest|badge|player)$", "", _slug(path.stem))
 
@@ -215,8 +229,6 @@ def match_stats(event_id: str, period: str=Query("full")):
         if row and away[key] is None: away[key]=_number(row.get("away"))
         if period == "full":
             if metric["label"] == "Possession Lost":
-                # Always use the established player-total definition, even if the
-                # match statistics block exposes a different 'dispossessed' value.
                 home[key]=_possession_lost_from_players(payload, "home")
                 away[key]=_possession_lost_from_players(payload, "away")
             else:
@@ -239,6 +251,7 @@ def player_stats(event_id: str, player_id: str):
 @app.get("/matches/{event_id}/canonical-leaders/{metric_key_value}")
 def leaders(event_id: str, metric_key_value: str, period: str=Query("full"), scope: str=Query("all"), limit: int=Query(20,ge=1,le=50)):
     if period!="full": raise HTTPException(400,"Metric Leader period data is only available for the full match from this SofaScore feed.")
+    if scope not in {"all","home","away"}: raise HTTPException(400,"Invalid leaderboard scope")
     metric=next((m for m in METRICS if metric_key(m["label"])==metric_key_value),None)
     if not metric: raise HTTPException(404,"Metric not available")
     ranked=[]
@@ -247,7 +260,17 @@ def leaders(event_id: str, metric_key_value: str, period: str=Query("full"), sco
         v=player_metric_value(p["stats"],metric)
         if v is not None: ranked.append((p,v))
     ranked.sort(key=lambda x:(-x[1],x[0]["name"])); top=ranked[:limit]; lead=top[0][1] if top else 0
-    return {"metric":metric_key_value,"label":metric["label"],"period":period,"leaders":[{"rank":i,"player_id":p["id"],"player_name":p["name"],"team_id":_slug(p["team"]),"team_name":p["team"],"value":v,"display":format_metric_value(v,metric),"relative_to_leader":v/lead if lead else 0} for i,(p,v) in enumerate(top,1)]}
+    counts: dict[float, int] = {}
+    for _, value in ranked:
+        counts[value] = counts.get(value, 0) + 1
+    leaders_out=[]; current_rank=0; previous_value: float | None=None
+    for index,(p,v) in enumerate(top,1):
+        if previous_value is None or v != previous_value:
+            current_rank=index
+            previous_value=v
+        joint=counts.get(v,0)>1
+        leaders_out.append({"rank":current_rank,"rank_label":_rank_label(current_rank,joint),"joint":joint,"player_id":p["id"],"player_name":p["name"],"team_id":_slug(p["team"]),"team_name":p["team"],"value":v,"display":format_metric_value(v,metric),"relative_to_leader":v/lead if lead else 0})
+    return {"metric":metric_key_value,"label":metric["label"],"period":period,"scope":scope,"leaders":leaders_out}
 
 @app.get("/team-logos/{team_slug}.png")
 def team_logo(team_slug: str):
