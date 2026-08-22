@@ -29,7 +29,7 @@
   display: block;
 }
 
-/* Player portrait: 15% larger than the previous 90% treatment, with all placeholder chrome removed. */
+/* Player portrait: 30% larger than the current portrait treatment, with all placeholder chrome removed. */
 .player-badge--photo {
   width: 108px;
   height: 108px;
@@ -45,8 +45,8 @@
   justify-content: center;
 }
 .player-badge--photo img {
-  width: 103.5%;
-  height: 103.5%;
+  width: 134.55%;
+  height: 134.55%;
   object-fit: contain;
   object-position: center;
   display: block;
