@@ -20,6 +20,22 @@ if [ ! -x "$PY" ]; then
   exit 1
 fi
 
+# Install ONLY the user's approved local imagery packs. No SofaScore imagery is downloaded.
+PLAYER_ZIP="$HOME/Downloads/2026 27 Leeds Players.zip"
+CLUB_ZIP="$HOME/Downloads/CLUB APP LOGOS.zip"
+PLAYER_ASSETS="$BACKEND_REPO/assets/player_images"
+TEAM_ASSETS="$BACKEND_REPO/assets/team_logos"
+mkdir -p "$PLAYER_ASSETS" "$TEAM_ASSETS"
+
+if [ -f "$PLAYER_ZIP" ]; then
+  rm -rf "$PLAYER_ASSETS"/*
+  unzip -oq "$PLAYER_ZIP" -d "$PLAYER_ASSETS"
+fi
+if [ -f "$CLUB_ZIP" ]; then
+  rm -rf "$TEAM_ASSETS"/*
+  unzip -oq "$CLUB_ZIP" -d "$TEAM_ASSETS"
+fi
+
 pkill -f "uvicorn studio_entry:app" >/dev/null 2>&1 || true
 pkill -f "vite.*5173" >/dev/null 2>&1 || true
 
