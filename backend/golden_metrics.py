@@ -46,7 +46,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Assists","sofascore":"Assists","match_keys":["assists"],"player_keys":["goalAssist","assists"]},
     {"label":"Penalties Won","sofascore":"Penalties Won","match_aliases":["Penalties won"],"match_keys":["penaltiesWon","penaltyWon"],"player_keys":["penaltyWon","penaltiesWon"]},
     {"label":"Saves From Inside Box","sofascore":"Saves From Inside Box","match_aliases":["Saves from inside box","Saves inside box"],"match_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"],"player_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"]},
-    {"label":"High Claims","sofascore":"High Claims","match_aliases":["High claims"],"match_keys":["highClaims","goodHighClaim"],"player_keys":["highClaims","goodHighClaim"],"default_zero":true},
+    {"label":"High Claims","sofascore":"High Claims","match_aliases":["High claims"],"match_keys":["highClaims","goodHighClaim"],"player_keys":["highClaims","goodHighClaim"],"default_zero":True},
     {"label":"Red Cards","sofascore":"Red Cards","match_aliases":["Red cards"],"match_keys":["redCards"],"player_keys":["redCards","redCard","directRedCards"]},
     {"label":"Defensive Actions","sofascore":"Def. Contribution","match_aliases":["Defensive contribution","Defensive contributions","Def. contribution","Def. contributions"],"match_keys":["defensiveContribution","defensiveContributions","defContribution","defContributions"],"player_keys":["defensiveContribution","defensiveContributions","defContribution","defContributions","defensiveActions"]},
 ]
