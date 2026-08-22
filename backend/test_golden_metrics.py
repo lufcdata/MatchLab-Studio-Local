@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from golden_metrics import METRICS, format_metric_value, metric_key, player_metric_value
+from main import _derive_period_stats, _period_goals
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +85,23 @@ class GoldenMetricAuditTests(unittest.TestCase):
         metric = self.metric("Pass Accuracy")
         self.assertAlmostEqual(player_metric_value({"accuratePass": 37, "totalPass": 41}, metric), 37 / 41 * 100)
         self.assertIsNone(player_metric_value({"accuratePass": 0, "totalPass": 0}, metric))
+
+    def test_half_goals_use_period_specific_scores(self):
+        payload = {"basic": {"event": {"homeScore": {"period1": 2, "period2": 1}, "awayScore": {"period1": 0, "period2": 1}}}}
+        self.assertEqual(_period_goals(payload, "first_half", "home"), 2.0)
+        self.assertEqual(_period_goals(payload, "second_half", "home"), 1.0)
+        self.assertEqual(_period_goals(payload, "first_half", "away"), 0.0)
+        self.assertEqual(_period_goals(payload, "second_half", "away"), 1.0)
+        self.assertIsNone(_period_goals(payload, "full", "home"))
+
+    def test_period_pass_accuracy_and_fouled_are_exact_derivations(self):
+        home = {"successful_passes": 37.0, "total_passes": 41.0, "pass_accuracy": None, "fouls": 5.0, "fouled": None}
+        away = {"successful_passes": 20.0, "total_passes": 25.0, "pass_accuracy": None, "fouls": 7.0, "fouled": None}
+        _derive_period_stats(home, away)
+        self.assertAlmostEqual(home["pass_accuracy"], 37 / 41 * 100)
+        self.assertAlmostEqual(away["pass_accuracy"], 80.0)
+        self.assertEqual(home["fouled"], 7.0)
+        self.assertEqual(away["fouled"], 5.0)
 
     def test_shared_number_formatting(self):
         self.assertEqual(format_metric_value(1.234, self.metric("xG")), "1.23")
