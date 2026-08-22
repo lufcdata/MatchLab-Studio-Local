@@ -70,20 +70,23 @@ def _number(value: Any) -> float | None:
         try: return float(text)
         except ValueError: return None
     return None
-def _first_number(stats: dict[str, Any], keys: list[str]) -> float:
+def _first_number(stats: dict[str, Any], keys: list[str]) -> float | None:
     for key in keys:
         value=_number(stats.get(key))
         if value is not None: return value
-    return 0.0
-def _defensive_actions(stats: dict[str, Any]) -> float:
-    tackles=_first_number(stats,["totalTackle","wonTackle","tacklesWon"])
-    interceptions=_first_number(stats,["interceptionWon","interceptions"])
-    blocks=_first_number(stats,["blockedScoringAttempt","blockedShots","blocks"])
-    clearances=_first_number(stats,["totalClearance","clearances"])
-    recoveries=_first_number(stats,["ballRecovery"])
-    aerial_duels=_first_number(stats,["aerialWon","aerialDuelsWon"])
-    fouls=_first_number(stats,["fouls"])
-    return tackles+interceptions+blocks+clearances+recoveries+aerial_duels+fouls
+    return None
+def _defensive_actions(stats: dict[str, Any]) -> float | None:
+    values=[
+        _first_number(stats,["totalTackle","wonTackle","tacklesWon"]),
+        _first_number(stats,["interceptionWon","interceptions"]),
+        _first_number(stats,["blockedScoringAttempt","blockedShots","blocks"]),
+        _first_number(stats,["totalClearance","clearances"]),
+        _first_number(stats,["ballRecovery"]),
+        _first_number(stats,["aerialWon","aerialDuelsWon"]),
+        _first_number(stats,["fouls"]),
+    ]
+    if all(value is None for value in values): return None
+    return sum(value or 0.0 for value in values)
 def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float | None:
     if metric.get("calculated")=="defensive_actions": return _defensive_actions(stats)
     for key in metric.get("player_keys",[]):
