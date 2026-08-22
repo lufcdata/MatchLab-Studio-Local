@@ -1,0 +1,32 @@
+name: Golden Metric Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/golden_metrics.py'
+      - 'backend/main.py'
+      - 'backend/test_golden_metrics.py'
+      - 'frontend/src/App.tsx'
+      - '.github/workflows/golden-metric-audit.yml'
+  pull_request:
+    paths:
+      - 'backend/golden_metrics.py'
+      - 'backend/main.py'
+      - 'backend/test_golden_metrics.py'
+      - 'frontend/src/App.tsx'
+      - '.github/workflows/golden-metric-audit.yml'
+
+jobs:
+  golden-metric-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run Golden metric regression tests
+        run: python -m unittest -v test_golden_metrics.py
