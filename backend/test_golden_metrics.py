@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -29,53 +28,11 @@ class GoldenMetricAuditTests(unittest.TestCase):
                     f"{metric['label']} has no player source",
                 )
 
-    def test_frontend_match_catalogue_exactly_matches_golden(self):
-        """Prevent Match Stats from silently drifting away from the Golden catalogue.
-
-        This deliberately checks both order and labels. Until App.tsx is fully runtime-
-        driven, this makes the duplicate frontend declaration fail loudly on any drift.
-        """
+    def test_frontend_uses_runtime_golden_catalogue_only(self):
         source = APP_TSX.read_text()
-        match = re.search(
-            r"const MATCH_FIELDS: StatDef\[\] = \[(.*?)\n\];",
-            source,
-            re.S,
-        )
-        self.assertIsNotNone(match, "MATCH_FIELDS catalogue missing from App.tsx")
-        rows = re.findall(
-            r"\{key:'([^']+)',label:'([^']+)'(?:,percent:true)?\}",
-            match.group(1),
-        )
-        expected = [(metric_key(m["label"]), m["label"]) for m in METRICS]
-        self.assertEqual(rows, expected, "Match page metric catalogue drifted from Golden METRICS")
-
-    def test_frontend_leader_fallback_is_only_golden_required_metrics(self):
-        """Keep the temporary Leaders fallback synchronized until it is removed."""
-        source = APP_TSX.read_text()
-        match = re.search(
-            r"const REQUIRED_LEADER_FIELDS:Array<\{key:string;label:string\}> = \[(.*?)\n\];",
-            source,
-            re.S,
-        )
-        self.assertIsNotNone(match, "REQUIRED_LEADER_FIELDS fallback missing from App.tsx")
-        rows = re.findall(r"\{key:'([^']+)',label:'([^']+)'\}", match.group(1))
-        expected_labels = {
-            "Opposition Box Touches",
-            "Shots Outside Box",
-            "Shots Inside The Box",
-            "Big Chances Created",
-            "Big Chances Missed",
-            "Successful Final Third Passes",
-            "Pass Accuracy",
-            "Final Third Entries",
-            "Ground Duels Won",
-            "Penalties Won",
-            "High Claims",
-            "Red Cards",
-            "Defensive Actions",
-        }
-        expected = [(metric_key(label), label) for label in [m["label"] for m in METRICS] if label in expected_labels]
-        self.assertEqual(rows, expected, "Leaders fallback catalogue drifted from Golden METRICS")
+        self.assertIn("/canonical/metrics", source)
+        self.assertNotIn("const MATCH_FIELDS", source)
+        self.assertNotIn("const REQUIRED_LEADER_FIELDS", source)
 
     def test_big_chance_zero_fallback_requires_participation(self):
         played = {"minutesPlayed": 90, "touches": 42}
@@ -84,6 +41,21 @@ class GoldenMetricAuditTests(unittest.TestCase):
             metric = self.metric(label)
             self.assertEqual(player_metric_value(played, metric), 0.0)
             self.assertIsNone(player_metric_value(unused, metric))
+
+    def test_player_big_chances_are_scored_plus_missed_not_created(self):
+        metric = self.metric("Big Chances")
+        stats = {
+            "minutesPlayed": 90,
+            "bigChanceScored": 2,
+            "bigChanceMissed": 1,
+            "bigChanceCreated": 5,
+        }
+        self.assertEqual(player_metric_value(stats, metric), 3.0)
+
+    def test_tackles_won_never_falls_back_to_total_tackles(self):
+        metric = self.metric("Tackles Won")
+        self.assertEqual(player_metric_value({"minutesPlayed": 90, "wonTackle": 2, "totalTackle": 5}, metric), 2.0)
+        self.assertIsNone(player_metric_value({"minutesPlayed": 90, "totalTackle": 5}, metric))
 
     def test_penalties_won_and_red_cards_zero_fallback_requires_participation(self):
         played = {"minutesPlayed": 90, "touches": 42}
