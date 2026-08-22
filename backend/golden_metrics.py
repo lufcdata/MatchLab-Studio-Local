@@ -15,7 +15,10 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Shots","sofascore":"Total Shots","match_aliases":["Total shots"],"match_keys":["totalShotsOnGoal","totalShots"],"player_keys":["totalShots"]},
     {"label":"Shots On-Target","sofascore":"Shots on target","match_keys":["shotsOnGoal","shotsOnTarget"],"player_keys":["onTargetScoringAttempt","shotsOnTarget"]},
     {"label":"Shots Outside Box","sofascore":"Shots outside box","match_keys":["totalShotsOutsideBox","shotsOutsideBox"],"player_keys":["shotFromOutsideTheBox","shotsOutsideBox","shotsFromOutsideTheBox","totalShotsOutsideBox"]},
+    {"label":"Shots Inside The Box","sofascore":"Shots inside box","match_aliases":["Shots inside the box","Shots from inside box","Shots from inside the box"],"match_keys":["totalShotsInsideBox","shotsInsideBox"],"player_keys":["shotFromInsideTheBox","shotsInsideBox","shotsFromInsideTheBox","totalShotsInsideBox"]},
     {"label":"Big Chances","sofascore":"Big Chances","match_aliases":["Big chances"],"match_keys":["bigChanceCreated","bigChances"],"player_keys":["bigChances","bigChance","bigChanceCreated"]},
+    {"label":"Big Chances Created","sofascore":"Big Chances Created","match_aliases":["Big chances created"],"match_keys":["bigChanceCreated","bigChancesCreated"],"player_keys":["bigChanceCreated","bigChancesCreated"]},
+    {"label":"Big Chances Missed","sofascore":"Big Chances Missed","match_aliases":["Big chances missed"],"match_keys":["bigChanceMissed","bigChancesMissed"],"player_keys":["bigChanceMissed","bigChancesMissed"]},
     {"label":"Chances Created","sofascore":"Key Passes","match_aliases":["Key passes","Key Pass","Chances created"],"match_keys":["keyPasses","keyPass","chancesCreated"],"player_keys":["keyPass","keyPasses","chancesCreated"]},
     {"label":"Successful Passes","sofascore":"Accurate Passes","match_aliases":["Accurate passes"],"match_keys":["accuratePasses"],"player_keys":["accuratePass","accuratePasses"]},
     {"label":"Total Passes","sofascore":"Passes","match_aliases":["Total passes"],"match_keys":["passes","totalPasses"],"player_keys":["totalPass","totalPasses"]},
@@ -50,7 +53,8 @@ METRICS: list[dict[str, Any]] = [
 
 METRIC_BY_LABEL = {m["label"]: m for m in METRICS}
 REQUIRED_PLAYER_LABELS = {
-    "Opposition Box Touches", "Shots Outside Box", "Successful Final Third Passes",
+    "Opposition Box Touches", "Shots Outside Box", "Shots Inside The Box",
+    "Big Chances Created", "Big Chances Missed", "Successful Final Third Passes",
     "Pass Accuracy", "Final Third Entries", "Ground Duels Won", "Penalties Won",
     "High Claims", "Red Cards", "Defensive Actions",
 }
@@ -100,7 +104,6 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
         value = _number(stats.get(key))
         if value is not None:
             return value
-    # MatchLab rule: Pass Accuracy = Successful Passes / Total Passes.
     if metric.get("label") == "Pass Accuracy":
         accurate = _number(stats.get("accuratePass"))
         if accurate is None:
