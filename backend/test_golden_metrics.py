@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from golden_metrics import METRICS, format_metric_value, metric_key, player_metric_value
-from main import _derive_period_stats, _period_goals
+from main import _derive_period_stats, _match_stat_value, _period_goals
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,6 +102,14 @@ class GoldenMetricAuditTests(unittest.TestCase):
         self.assertAlmostEqual(away["pass_accuracy"], 80.0)
         self.assertEqual(home["fouled"], 7.0)
         self.assertEqual(away["fouled"], 5.0)
+
+    def test_ratio_match_stats_use_successful_or_won_count_not_percentage(self):
+        row = {"home": "7/12 (58%)", "away": "4/10 (40%)", "home_value": 58, "away_value": 40}
+        for label in ("Accurate Long Passes", "Accurate Crosses", "Ground Duels Won", "Aerial Duels Won", "Duels Won", "Successful Take-Ons", "Tackles Won"):
+            metric = self.metric(label)
+            self.assertEqual(_match_stat_value(metric, row, "home"), 7.0)
+            self.assertEqual(_match_stat_value(metric, row, "away"), 4.0)
+        self.assertEqual(_match_stat_value(self.metric("Possession"), row, "home"), 58.0)
 
     def test_shared_number_formatting(self):
         self.assertEqual(format_metric_value(1.234, self.metric("xG")), "1.23")
