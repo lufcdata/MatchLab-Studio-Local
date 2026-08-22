@@ -233,7 +233,7 @@ def match_stats(event_id: str, period: str=Query("full")):
 def player_stats(event_id: str, player_id: str):
     p=next((p for p in _players(_load(event_id)) if p["id"]==str(player_id)),None)
     if not p: raise HTTPException(404,"Player not found")
-    rows,minutes=build_canonical_player_rows(p["stats"],hide_zero=True)
+    rows,minutes=build_canonical_player_rows(p["stats"],hide_zero=False)
     return {"player":{"player_id":p["id"],"name":p["name"],"team":p["team"],"opponent":p["opponent"],"side":p["side"]},"rows":rows,"minutes":minutes}
 
 @app.get("/matches/{event_id}/canonical-leaders/{metric_key_value}")
