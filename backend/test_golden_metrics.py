@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import re
 import unittest
+from pathlib import Path
 
 from golden_metrics import METRICS, format_metric_value, metric_key, player_metric_value
+
+
+ROOT = Path(__file__).resolve().parents[1]
+APP_TSX = ROOT / "frontend" / "src" / "App.tsx"
 
 
 class GoldenMetricAuditTests(unittest.TestCase):
@@ -22,6 +28,54 @@ class GoldenMetricAuditTests(unittest.TestCase):
                     metric.get("player_keys") or metric.get("calculated"),
                     f"{metric['label']} has no player source",
                 )
+
+    def test_frontend_match_catalogue_exactly_matches_golden(self):
+        """Prevent Match Stats from silently drifting away from the Golden catalogue.
+
+        This deliberately checks both order and labels. Until App.tsx is fully runtime-
+        driven, this makes the duplicate frontend declaration fail loudly on any drift.
+        """
+        source = APP_TSX.read_text()
+        match = re.search(
+            r"const MATCH_FIELDS: StatDef\[\] = \[(.*?)\n\];",
+            source,
+            re.S,
+        )
+        self.assertIsNotNone(match, "MATCH_FIELDS catalogue missing from App.tsx")
+        rows = re.findall(
+            r"\{key:'([^']+)',label:'([^']+)'(?:,percent:true)?\}",
+            match.group(1),
+        )
+        expected = [(metric_key(m["label"]), m["label"]) for m in METRICS]
+        self.assertEqual(rows, expected, "Match page metric catalogue drifted from Golden METRICS")
+
+    def test_frontend_leader_fallback_is_only_golden_required_metrics(self):
+        """Keep the temporary Leaders fallback synchronized until it is removed."""
+        source = APP_TSX.read_text()
+        match = re.search(
+            r"const REQUIRED_LEADER_FIELDS:Array<\{key:string;label:string\}> = \[(.*?)\n\];",
+            source,
+            re.S,
+        )
+        self.assertIsNotNone(match, "REQUIRED_LEADER_FIELDS fallback missing from App.tsx")
+        rows = re.findall(r"\{key:'([^']+)',label:'([^']+)'\}", match.group(1))
+        expected_labels = {
+            "Opposition Box Touches",
+            "Shots Outside Box",
+            "Shots Inside The Box",
+            "Big Chances Created",
+            "Big Chances Missed",
+            "Successful Final Third Passes",
+            "Pass Accuracy",
+            "Final Third Entries",
+            "Ground Duels Won",
+            "Penalties Won",
+            "High Claims",
+            "Red Cards",
+            "Defensive Actions",
+        }
+        expected = [(metric_key(label), label) for label in [m["label"] for m in METRICS] if label in expected_labels]
+        self.assertEqual(rows, expected, "Leaders fallback catalogue drifted from Golden METRICS")
 
     def test_big_chance_zero_fallback_requires_participation(self):
         played = {"minutesPlayed": 90, "touches": 42}
