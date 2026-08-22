@@ -56,6 +56,10 @@ def _load(event_id: str) -> dict[str, Any]:
 def _match(payload: dict[str, Any]) -> dict[str, Any]:
     e = payload["basic"].get("event", payload["basic"]); hs = e.get("homeScore", {}) or {}; aws = e.get("awayScore", {}) or {}; timestamp = e.get("startTimestamp")
     return {"event_id":str(e.get("id","")),"home_name":(e.get("homeTeam",{}) or {}).get("name","Home"),"away_name":(e.get("awayTeam",{}) or {}).get("name","Away"),"home_score":str(hs.get("display",hs.get("current",""))),"away_score":str(aws.get("display",aws.get("current",""))),"tournament":(((e.get("tournament",{}) or {}).get("uniqueTournament",{}) or {}).get("name") or (e.get("tournament",{}) or {}).get("name","")),"date_text":datetime.fromtimestamp(timestamp).strftime("%d %B %Y") if timestamp else ""}
+def _period_goals(payload: dict[str, Any], period: str, side: str) -> float | None:
+    if period not in {"first_half","second_half"}: return None
+    event=payload["basic"].get("event",payload["basic"]); scores=event.get(f"{side}Score",{}) or {}; key="period1" if period=="first_half" else "period2"
+    return _number(scores.get(key))
 def _players(payload: dict[str, Any]) -> list[dict[str, Any]]:
     m=_match(payload); out=[]
     for side in ("home","away"):
@@ -148,6 +152,8 @@ def match_stats(event_id:str,period:str=Query("full")):
                 if home[key] is None:home[key]=_full_match_player_fallback(payload,metric,"home")
                 if away[key] is None:away[key]=_full_match_player_fallback(payload,metric,"away")
     if period=="full":home["goals"]=_number(m["home_score"]);away["goals"]=_number(m["away_score"])
+    else:
+        home["goals"]=_period_goals(payload,period,"home");away["goals"]=_period_goals(payload,period,"away")
     _derive_period_stats(home,away)
     return {"event_id":event_id,"canonical_match_id":event_id,"period":period,"match":{"match_id":event_id,"date":m["date_text"],"home_team_id":_slug(m["home_name"]),"home_team":m["home_name"],"away_team_id":_slug(m["away_name"]),"away_team":m["away_name"],"home_score":m["home_score"],"away_score":m["away_score"]},"home":home,"away":away,"availability":{"missing_fields":[k for k in home if home[k] is None or away[k] is None]}}
 @app.get("/matches/{event_id}/players/{player_id}")
@@ -189,4 +195,4 @@ def player_image(player_slug:str):
                     crest=_find_asset(pl["team"],TEAM_ASSET_ROOTS)
                     if crest:return FileResponse(crest)
         except Exception:pass
-    raise HTTPException(404,"No approved local player image or club crest is available.")
+    raise HTTPException(404,"No approved local player image or club crest is available.)
