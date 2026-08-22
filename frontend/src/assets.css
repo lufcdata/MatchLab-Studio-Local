@@ -89,6 +89,25 @@
   letter-spacing: .1em;
 }
 
+/* Metric Leaders: no top logo, compact header, and enough vertical room for a true Top 20. */
+.leaders-header {
+  padding: 24px 76px 16px;
+}
+.leaders-header h2 {
+  margin-top: 0;
+}
+.leaders-header + .player-stats-panel {
+  padding-top: 6px;
+}
+.leaders-header + .player-stats-panel .player-stats-list {
+  gap: 4px;
+}
+.leaders-header + .player-stats-panel .player-stat-row {
+  min-height: 43px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 /* Shared footer treatment for Match Stats, Player Stats and Metric Leaders. Direct PNGs are preferred for crisp raster output. */
 .graphic-footer .footer-left {
   width: 120px;
