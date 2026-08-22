@@ -71,6 +71,21 @@
   letter-spacing: .1em;
 }
 
+/* Shared footer treatment for Match Stats, Player Stats and Metric Leaders. */
+.graphic-footer .footer-spacer {
+  width: 120px;
+  height: 46px;
+  flex: 0 0 120px;
+  background: url('/logo-rose.svg') left center / 46px 46px no-repeat;
+}
+.graphic-footer .footer-page img {
+  content: url('/logo-strap.svg');
+  width: 120px;
+  height: 36px;
+  object-fit: contain;
+  opacity: 1;
+}
+
 @media (max-width: 620px) {
   .team-badge { flex-basis: 72px; height: 72px; }
   .team-badge__image { width: 90%; height: 90%; }
