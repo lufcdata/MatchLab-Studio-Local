@@ -1,0 +1,7 @@
+.player-stat-row--locked .leader-rank-badge {
+  visibility: hidden;
+}
+
+.player-stat-row:has(.player-stat-bar > span[style*="width: 0%"] ) .leader-rank-badge {
+  visibility: hidden;
+}
