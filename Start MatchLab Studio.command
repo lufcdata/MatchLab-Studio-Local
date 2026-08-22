@@ -64,6 +64,27 @@ if command -v mdfind >/dev/null 2>&1; then
   fi
 fi
 
+# Import the exact footer artwork supplied for MatchLab. Direct PNG files are used
+# so the rose remains crisp and is not rasterised through an SVG wrapper.
+mkdir -p "$FRONTEND/public"
+find_footer_asset(){
+  NAME="$1"
+  for candidate in \
+    "$STUDIO_ROOT/$NAME" \
+    "$HOME/Downloads/$NAME" \
+    "$HOME/Desktop/$NAME" \
+    "$HOME/Documents/$NAME"; do
+    if [ -f "$candidate" ]; then echo "$candidate"; return 0; fi
+  done
+  if command -v mdfind >/dev/null 2>&1; then
+    mdfind "kMDItemFSName == \"$NAME\"c" | head -1 || true
+  fi
+}
+ROSE_SOURCE="$(find_footer_asset 'Logo Rose.png')"
+STRAP_SOURCE="$(find_footer_asset 'Logo strap.png')"
+[ -n "$ROSE_SOURCE" ] && [ -f "$ROSE_SOURCE" ] && /bin/cp -f "$ROSE_SOURCE" "$FRONTEND/public/logo-rose.png"
+[ -n "$STRAP_SOURCE" ] && [ -f "$STRAP_SOURCE" ] && /bin/cp -f "$STRAP_SOURCE" "$FRONTEND/public/logo-strap.png"
+
 if [ ! -x "$PY" ]; then
   SYSTEM_PY="$(command -v python3 || true)"
   [ -n "$SYSTEM_PY" ] || fail_dialog "Python 3 is required to run MatchLab Studio."
