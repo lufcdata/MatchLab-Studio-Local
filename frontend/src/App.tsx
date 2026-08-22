@@ -27,7 +27,8 @@ const API = import.meta.env.VITE_MATCHLAB_API || 'http://localhost:8000';
 const MATCH_FIELDS: StatDef[] = [
   {key:'goals',label:'Goals'}, {key:'xg',label:'xG'}, {key:'possession',label:'Possession',percent:true},
   {key:'touches',label:'Touches'}, {key:'opposition_box_touches',label:'Opposition Box Touches'}, {key:'shots',label:'Shots'},
-  {key:'shots_on_target',label:'Shots On-Target'}, {key:'shots_outside_box',label:'Shots Outside Box'}, {key:'big_chances',label:'Big Chances'},
+  {key:'shots_on_target',label:'Shots On-Target'}, {key:'shots_outside_box',label:'Shots Outside Box'}, {key:'shots_inside_the_box',label:'Shots Inside The Box'},
+  {key:'big_chances',label:'Big Chances'}, {key:'big_chances_created',label:'Big Chances Created'}, {key:'big_chances_missed',label:'Big Chances Missed'},
   {key:'chances_created',label:'Chances Created'}, {key:'successful_passes',label:'Successful Passes'}, {key:'total_passes',label:'Total Passes'},
   {key:'successful_final_third_passes',label:'Successful Final Third Passes'}, {key:'pass_accuracy',label:'Pass Accuracy',percent:true},
   {key:'ball_carries',label:'Ball Carries'}, {key:'progressive_carries',label:'Progressive Carries'},
@@ -41,10 +42,12 @@ const MATCH_FIELDS: StatDef[] = [
   {key:'defensive_actions',label:'Defensive Actions'},
 ];
 
-/* Explicitly requested Leader metrics from the user's Golden MatchLab list. */
 const REQUIRED_LEADER_FIELDS:Array<{key:string;label:string}> = [
   {key:'opposition_box_touches',label:'Opposition Box Touches'},
   {key:'shots_outside_box',label:'Shots Outside Box'},
+  {key:'shots_inside_the_box',label:'Shots Inside The Box'},
+  {key:'big_chances_created',label:'Big Chances Created'},
+  {key:'big_chances_missed',label:'Big Chances Missed'},
   {key:'successful_final_third_passes',label:'Successful Final Third Passes'},
   {key:'pass_accuracy',label:'Pass Accuracy'},
   {key:'final_third_entries',label:'Final Third Entries'},
