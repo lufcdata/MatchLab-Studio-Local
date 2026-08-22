@@ -50,7 +50,7 @@ FRONTEND_PORT="$(find_free_port 5173 5273 || true)"
 
 cd "$BACKEND"
 : > /tmp/matchlab-backend.log
-nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
+nohup "$PY" -m uvicorn imagery_app:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
 BACKEND_PID=$!
 
 sleep 1
