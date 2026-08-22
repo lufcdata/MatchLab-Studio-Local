@@ -90,6 +90,11 @@ def _defensive_actions(stats: dict[str, Any]) -> float | None:
 def _looks_goalkeeper(stats: dict[str, Any]) -> bool:
     goalkeeper_keys={"saves","savedShotsFromInsideTheBox","savesFromInsideBox","goalsPrevented","goodHighClaim","highClaims","punches","runsOut","successfulRunsOut"}
     return any(key in stats for key in goalkeeper_keys)
+def _has_participated(stats: dict[str, Any]) -> bool:
+    minutes=_number(stats.get("minutesPlayed"))
+    if minutes is not None and minutes > 0: return True
+    participation_keys={"touches","totalTouches","totalPass","totalPasses","accuratePass","accuratePasses","rating"}
+    return any(_number(stats.get(key)) is not None for key in participation_keys)
 def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float | None:
     if metric.get("calculated")=="defensive_actions": return _defensive_actions(stats)
     for key in metric.get("player_keys",[]):
@@ -100,8 +105,8 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
         total=_number(stats.get("totalPass")); total=_number(stats.get("totalPasses")) if total is None else total
         if accurate is not None and total and total>0: return accurate/total*100.0
     if metric.get("label")=="High Claims" and metric.get("default_zero"):
-        return 0.0 if _looks_goalkeeper(stats) else None
-    if metric.get("default_zero"): return 0.0
+        return 0.0 if _looks_goalkeeper(stats) and _has_participated(stats) else None
+    if metric.get("default_zero"): return 0.0 if _has_participated(stats) else None
     return None
 def format_metric_value(value: float, metric: dict[str, Any]) -> str:
     if metric.get("label")=="xG": return f"{value:.2f}"
