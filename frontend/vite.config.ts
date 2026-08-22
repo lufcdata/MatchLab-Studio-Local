@@ -3,5 +3,11 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    proxy: {
+      '/team-logos': 'http://127.0.0.1:8000',
+      '/player-images': 'http://127.0.0.1:8000',
+    },
+  },
 });
