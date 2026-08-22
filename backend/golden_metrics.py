@@ -4,8 +4,7 @@ import re
 from typing import Any
 
 # MATCHLAB GOLDEN METRIC MAP
-# This file is the only metric-definition source used by the local Studio runtime.
-# It is based on the user's approved MatchLab labels and SofaScore-equivalent labels.
+# MatchLab display labels remain separate from SofaScore source fields.
 METRICS: list[dict[str, Any]] = [
     {"label":"Goals","sofascore":"Goals","match_keys":["goals"],"player_keys":["goals"]},
     {"label":"xG","sofascore":"Expected Goals (xG)","match_aliases":["Expected goals"],"match_keys":["expectedGoals"],"player_keys":["expectedGoals","expectedGoalsValue"]},
@@ -48,122 +47,70 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Saves From Inside Box","sofascore":"Saves From Inside Box","match_aliases":["Saves from inside box","Saves inside box"],"match_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"],"player_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"]},
     {"label":"High Claims","sofascore":"High Claims","match_aliases":["High claims"],"match_keys":["highClaims","goodHighClaim"],"player_keys":["highClaims","goodHighClaim"],"default_zero":True},
     {"label":"Red Cards","sofascore":"Red Cards","match_aliases":["Red cards"],"match_keys":["redCards"],"player_keys":["redCards","redCard","directRedCards"]},
-    {"label":"Defensive Actions","sofascore":"Def. Contribution","match_aliases":["Defensive contribution","Defensive contributions","Def. contribution","Def. contributions"],"match_keys":["defensiveContribution","defensiveContributions","defContribution","defContributions"],"player_keys":["defensiveContribution","defensiveContributions","defContribution","defContributions","defensiveActions"]},
+    {"label":"Defensive Actions","sofascore":"Calculated: Tackles + Interceptions + Blocks + Clearances + Ball Recoveries + Aerial Duels + Fouls","match_keys":[],"player_keys":["totalTackle","wonTackle","tacklesWon","interceptionWon","interceptions","blockedScoringAttempt","blockedShots","blocks","totalClearance","clearances","ballRecovery","aerialWon","aerialDuelsWon","fouls"],"calculated":"defensive_actions"},
 ]
 
 METRIC_BY_LABEL = {m["label"]: m for m in METRICS}
-REQUIRED_PLAYER_LABELS = {
-    "Opposition Box Touches", "Shots Outside Box", "Shots Inside The Box",
-    "Big Chances Created", "Big Chances Missed", "Successful Final Third Passes",
-    "Pass Accuracy", "Final Third Entries", "Ground Duels Won", "Penalties Won",
-    "High Claims", "Red Cards", "Defensive Actions",
-}
+REQUIRED_PLAYER_LABELS = {"Opposition Box Touches","Shots Outside Box","Shots Inside The Box","Big Chances Created","Big Chances Missed","Successful Final Third Passes","Pass Accuracy","Final Third Entries","Ground Duels Won","Penalties Won","High Claims","Red Cards","Defensive Actions"}
 
-
-def metric_key(label: str) -> str:
-    return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in label).split())
-
-
+def metric_key(label: str) -> str: return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in label).split())
 def _norm(value: Any) -> str:
-    text = str(value or "").strip()
-    text = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
-    text = text.replace("&", " and ")
-    text = re.sub(r"[^A-Za-z0-9]+", " ", text)
-    return " ".join(text.lower().split())
-
-
+    text=str(value or "").strip(); text=re.sub(r"([a-z0-9])([A-Z])",r"\1 \2",text); text=text.replace("&"," and "); text=re.sub(r"[^A-Za-z0-9]+"," ",text); return " ".join(text.lower().split())
 def canonical_match_label(raw_name: str, raw_key: str | None = None) -> str | None:
-    needles = {_norm(raw_name), _norm(raw_key)} - {""}
+    needles={_norm(raw_name),_norm(raw_key)}-{""}
     for metric in METRICS:
-        candidates = [metric.get("sofascore"), *metric.get("match_aliases", [])]
-        candidates.extend(metric.get("match_keys", []))
-        candidate_norms = {_norm(name) for name in candidates if name}
-        if needles & candidate_norms:
-            return str(metric["label"])
+        candidates=[metric.get("sofascore"),*metric.get("match_aliases",[])]; candidates.extend(metric.get("match_keys",[]))
+        if needles & {_norm(x) for x in candidates if x}: return str(metric["label"])
     return None
-
-
 def _number(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        text=value.strip().replace(",","")
-        if text.endswith("%"):
-            text=text[:-1].strip()
-        try:
-            return float(text)
-        except ValueError:
-            return None
+    if isinstance(value,bool): return None
+    if isinstance(value,(int,float)): return float(value)
+    if isinstance(value,str):
+        text=value.strip().replace(",",""); text=text[:-1].strip() if text.endswith("%") else text
+        try: return float(text)
+        except ValueError: return None
     return None
-
-
+def _first_number(stats: dict[str, Any], keys: list[str]) -> float:
+    for key in keys:
+        value=_number(stats.get(key))
+        if value is not None: return value
+    return 0.0
+def _defensive_actions(stats: dict[str, Any]) -> float:
+    tackles=_first_number(stats,["totalTackle","wonTackle","tacklesWon"])
+    interceptions=_first_number(stats,["interceptionWon","interceptions"])
+    blocks=_first_number(stats,["blockedScoringAttempt","blockedShots","blocks"])
+    clearances=_first_number(stats,["totalClearance","clearances"])
+    recoveries=_first_number(stats,["ballRecovery"])
+    aerial_duels=_first_number(stats,["aerialWon","aerialDuelsWon"])
+    fouls=_first_number(stats,["fouls"])
+    return tackles+interceptions+blocks+clearances+recoveries+aerial_duels+fouls
 def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float | None:
-    for key in metric.get("player_keys", []):
-        value = _number(stats.get(key))
-        if value is not None:
-            return value
-    if metric.get("label") == "Defensive Actions":
-        accepted = {"def contribution", "def contributions", "defensive contribution", "defensive contributions", "defensive actions"}
-        for key, raw_value in stats.items():
-            if _norm(key) in accepted:
-                value = _number(raw_value)
-                if value is not None:
-                    return value
-    if metric.get("label") == "Pass Accuracy":
-        accurate = _number(stats.get("accuratePass"))
-        if accurate is None:
-            accurate = _number(stats.get("accuratePasses"))
-        total = _number(stats.get("totalPass"))
-        if total is None:
-            total = _number(stats.get("totalPasses"))
-        if accurate is not None and total and total > 0:
-            return accurate / total * 100.0
-    if metric.get("default_zero"):
-        return 0.0
+    if metric.get("calculated")=="defensive_actions": return _defensive_actions(stats)
+    for key in metric.get("player_keys",[]):
+        value=_number(stats.get(key))
+        if value is not None: return value
+    if metric.get("label")=="Pass Accuracy":
+        accurate=_number(stats.get("accuratePass")); accurate=_number(stats.get("accuratePasses")) if accurate is None else accurate
+        total=_number(stats.get("totalPass")); total=_number(stats.get("totalPasses")) if total is None else total
+        if accurate is not None and total and total>0: return accurate/total*100.0
+    if metric.get("default_zero"): return 0.0
     return None
-
-
 def format_metric_value(value: float, metric: dict[str, Any]) -> str:
-    if metric.get("label") == "xG":
-        return f"{value:.2f}"
-    if float(value).is_integer():
-        text = str(int(value))
-    else:
-        text = f"{value:.1f}"
-    return f"{text}%" if metric.get("suffix") == "%" else text
-
-
-def format_player_metric(stats: dict[str, Any], metric: dict[str, Any], value: float) -> str:
-    return format_metric_value(value, metric)
-
-
+    if metric.get("label")=="xG": return f"{value:.2f}"
+    text=str(int(value)) if float(value).is_integer() else f"{value:.1f}"; return f"{text}%" if metric.get("suffix")=="%" else text
+def format_player_metric(stats: dict[str, Any], metric: dict[str, Any], value: float) -> str: return format_metric_value(value,metric)
 def available_player_metrics(players) -> list[dict[str, Any]]:
-    available: list[dict[str, Any]] = []
+    available=[]
     for metric in METRICS:
-        if not metric.get("player_keys"):
-            continue
-        if metric["label"] in REQUIRED_PLAYER_LABELS or any(player_metric_value(p.stats, metric) is not None for p in players):
-            available.append({**metric, "key": metric_key(metric["label"])})
+        if not metric.get("player_keys"): continue
+        if metric["label"] in REQUIRED_PLAYER_LABELS or any(player_metric_value(p.stats,metric) is not None for p in players): available.append({**metric,"key":metric_key(metric["label"])})
     return available
-
-
 def build_canonical_player_rows(stats: dict[str, Any], hide_zero: bool = True) -> tuple[list[dict[str, Any]], Any]:
-    rows: list[dict[str, Any]] = []
+    rows=[]
     for metric in METRICS:
-        if not metric.get("player_keys"):
-            continue
-        value = player_metric_value(stats, metric)
-        if value is None:
-            continue
-        if hide_zero and value == 0 and metric["label"] not in REQUIRED_PLAYER_LABELS:
-            continue
-        rows.append({
-            "key": metric_key(metric["label"]),
-            "label": metric["label"],
-            "display": format_player_metric(stats, metric, value),
-            "rank": value,
-            "value": value,
-        })
-    return rows, stats.get("minutesPlayed")
+        if not metric.get("player_keys"): continue
+        value=player_metric_value(stats,metric)
+        if value is None: continue
+        if hide_zero and value==0 and metric["label"] not in REQUIRED_PLAYER_LABELS: continue
+        rows.append({"key":metric_key(metric["label"]),"label":metric["label"],"display":format_player_metric(stats,metric,value),"rank":value,"value":value})
+    return rows,stats.get("minutesPlayed")
