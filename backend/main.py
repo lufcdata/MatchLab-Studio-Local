@@ -21,7 +21,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 TEAM_ASSET_ROOTS = (ROOT / "assets" / "team_logos", ROOT / "assets" / "club_logos")
 PLAYER_ASSET_ROOTS = (ROOT / "assets" / "player_images", ROOT / "assets" / "players")
 
-app = FastAPI(title="MatchLab API", version="4.0.1-self-contained")
+app = FastAPI(title="MatchLab API", version="4.0.2-self-contained")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 class ImportRequest(BaseModel):
@@ -138,12 +138,6 @@ def _pass_accuracy_from_players(payload: dict[str, Any], side: str) -> float | N
 
 
 def _full_match_player_fallback(payload: dict[str, Any], metric: dict[str, Any], side: str) -> float | None:
-    """Fill a genuinely missing full-match team value from the same SofaScore player data.
-
-    Raw match-page values always win. This fallback is only for additive Golden
-    metrics that SofaScore exposes in the lineup/player statistics rather than the
-    match-statistics block. Possession and Corners are deliberately not inferred.
-    """
     label = metric["label"]
     if label == "Pass Accuracy":
         return _pass_accuracy_from_players(payload, side)
@@ -152,6 +146,24 @@ def _full_match_player_fallback(payload: dict[str, Any], metric: dict[str, Any],
     if not metric.get("player_keys"):
         return None
     return _sum_player_metric(payload, metric, side)
+
+
+def _possession_lost_from_players(payload: dict[str, Any], side: str) -> float | None:
+    """Golden MatchLab team Possession Lost = sum of SofaScore player possessionLostCtrl.
+
+    Do not use the small match-page 'dispossessed' style value; that is a different
+    event concept and was the source of the previously incorrect team total.
+    """
+    values: list[float] = []
+    for p in _players(payload):
+        if p["side"] != side:
+            continue
+        value = _number(p["stats"].get("possessionLostCtrl"))
+        if value is None:
+            value = _number(p["stats"].get("possessionLost"))
+        if value is not None:
+            values.append(value)
+    return sum(values) if values else None
 
 
 def _asset_stem(path: Path) -> str:
@@ -168,7 +180,7 @@ def _find_asset(wanted: str, roots: tuple[Path,...]) -> Path | None:
     return None
 
 @app.get("/health")
-def health(): return {"ok":True,"service":"matchlab-api","runtime":"self-contained","version":"4.0.1"}
+def health(): return {"ok":True,"service":"matchlab-api","runtime":"self-contained","version":"4.0.2"}
 
 @app.post("/matches/import-sofascore")
 def import_sofascore(req: ImportRequest):
@@ -202,11 +214,16 @@ def match_stats(event_id: str, period: str=Query("full")):
         if row and home[key] is None: home[key]=_number(row.get("home"))
         if row and away[key] is None: away[key]=_number(row.get("away"))
         if period == "full":
-            if home[key] is None: home[key]=_full_match_player_fallback(payload, metric, "home")
-            if away[key] is None: away[key]=_full_match_player_fallback(payload, metric, "away")
+            if metric["label"] == "Possession Lost":
+                # Always use the established player-total definition, even if the
+                # match statistics block exposes a different 'dispossessed' value.
+                home[key]=_possession_lost_from_players(payload, "home")
+                away[key]=_possession_lost_from_players(payload, "away")
+            else:
+                if home[key] is None: home[key]=_full_match_player_fallback(payload, metric, "home")
+                if away[key] is None: away[key]=_full_match_player_fallback(payload, metric, "away")
     if period=="full":
         home["goals"]=_number(m["home_score"]); away["goals"]=_number(m["away_score"])
-        # Golden MatchLab rule: team Pass Accuracy = Successful Passes / Total Passes.
         for values in (home, away):
             if values.get("pass_accuracy") is None and values.get("successful_passes") is not None and values.get("total_passes"):
                 values["pass_accuracy"] = values["successful_passes"] / values["total_passes"] * 100.0
