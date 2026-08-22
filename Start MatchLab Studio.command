@@ -16,6 +16,54 @@ else
   git -C "$BACKEND_REPO" checkout -B matchlab-v2-web origin/matchlab-v2-web >/dev/null 2>&1
 fi
 
+# Wire in the exact MatchLab crests/player images supplied by the user.
+# No SofaScore/FPL/third-party imagery is downloaded here.
+TEAM_ASSET_DIR="$BACKEND_REPO/assets/team_logos"
+PLAYER_ASSET_DIR="$BACKEND_REPO/assets/player_images"
+mkdir -p "$TEAM_ASSET_DIR" "$PLAYER_ASSET_DIR"
+
+ASSET_ZIP=""
+for candidate in \
+  "$STUDIO_ROOT/MatchLab-Studio-Assets.zip" \
+  "$HOME/Downloads/MatchLab-Studio-Assets.zip" \
+  "$HOME/Desktop/MatchLab-Studio-Assets.zip" \
+  "$HOME/Documents/MatchLab-Studio-Assets.zip"; do
+  if [ -f "$candidate" ]; then ASSET_ZIP="$candidate"; break; fi
+done
+if [ -z "$ASSET_ZIP" ] && command -v mdfind >/dev/null 2>&1; then
+  ASSET_ZIP="$(mdfind 'kMDItemFSName == "MatchLab-Studio-Assets.zip"c' | head -1 || true)"
+fi
+
+if [ -n "$ASSET_ZIP" ] && [ -f "$ASSET_ZIP" ]; then
+  TMP_ASSETS="$(mktemp -d /tmp/matchlab-assets.XXXXXX)"
+  /usr/bin/unzip -q -o "$ASSET_ZIP" -d "$TMP_ASSETS"
+  if [ -d "$TMP_ASSETS/public/team-logos" ]; then
+    /bin/cp -f "$TMP_ASSETS/public/team-logos/"* "$TEAM_ASSET_DIR/" 2>/dev/null || true
+  fi
+  if [ -d "$TMP_ASSETS/public/player-images" ]; then
+    /bin/cp -f "$TMP_ASSETS/public/player-images/"* "$PLAYER_ASSET_DIR/" 2>/dev/null || true
+  fi
+  /bin/rm -rf "$TMP_ASSETS"
+fi
+
+# Also recognise the original supplied folders directly if they are already on this Mac.
+if command -v mdfind >/dev/null 2>&1; then
+  if [ ! -f "$TEAM_ASSET_DIR/leeds-united.png" ]; then
+    FOUND_TEAM="$(mdfind 'kMDItemFSName == "leeds-united.png"c' | head -1 || true)"
+    if [ -n "$FOUND_TEAM" ]; then
+      SOURCE_DIR="${FOUND_TEAM:h}"
+      /bin/cp -f "$SOURCE_DIR/"*.png "$TEAM_ASSET_DIR/" 2>/dev/null || true
+    fi
+  fi
+  if [ ! -f "$PLAYER_ASSET_DIR/joe-rodon.png" ]; then
+    FOUND_PLAYER="$(mdfind 'kMDItemFSName == "joe-rodon.png"c' | head -1 || true)"
+    if [ -n "$FOUND_PLAYER" ]; then
+      SOURCE_DIR="${FOUND_PLAYER:h}"
+      /bin/cp -f "$SOURCE_DIR/"*.png "$PLAYER_ASSET_DIR/" 2>/dev/null || true
+    fi
+  fi
+fi
+
 if [ ! -x "$PY" ]; then
   SYSTEM_PY="$(command -v python3 || true)"
   [ -n "$SYSTEM_PY" ] || fail_dialog "Python 3 is required to run MatchLab Studio."
@@ -50,7 +98,7 @@ FRONTEND_PORT="$(find_free_port 5173 5273 || true)"
 
 cd "$BACKEND"
 : > /tmp/matchlab-backend.log
-nohup "$PY" -m uvicorn imagery_app:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
+nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
 BACKEND_PID=$!
 
 sleep 1
