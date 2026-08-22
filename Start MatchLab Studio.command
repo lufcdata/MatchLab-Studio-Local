@@ -29,7 +29,6 @@ fi
 
 command -v npm >/dev/null 2>&1 || fail_dialog "Node/npm is required to run MatchLab Studio."
 
-# Do NOT fight other local apps for fixed ports. Pick free localhost ports dynamically.
 find_free_port(){
   START="$1"
   END="$2"
@@ -66,7 +65,7 @@ if [ ! -d node_modules ]; then
   npm install >/tmp/matchlab-npm.log 2>&1 || fail_dialog "MatchLab could not install its frontend packages."
 fi
 : > /tmp/matchlab-frontend.log
-VITE_MATCHLAB_API="http://127.0.0.1:$BACKEND_PORT" nohup npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort > /tmp/matchlab-frontend.log 2>&1 &
+MATCHLAB_BACKEND_URL="http://127.0.0.1:$BACKEND_PORT" VITE_MATCHLAB_API="/api" nohup npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort > /tmp/matchlab-frontend.log 2>&1 &
 FRONTEND_PID=$!
 
 for i in {1..60}; do
@@ -83,12 +82,11 @@ for i in {1..60}; do
 
   HEALTH="$(curl -fsS "http://127.0.0.1:$BACKEND_PORT/health" 2>/dev/null || true)"
   FRONT_OK="$(curl -fsS "http://127.0.0.1:$FRONTEND_PORT" 2>/dev/null || true)"
-  OPENAPI="$(curl -fsS "http://127.0.0.1:$BACKEND_PORT/openapi.json" 2>/dev/null || true)"
+  PROXY_OK="$(curl -fsS "http://127.0.0.1:$FRONTEND_PORT/api/health" 2>/dev/null || true)"
 
-  if [ -n "$HEALTH" ] && [ -n "$FRONT_OK" ] && [ -n "$OPENAPI" ]; then
-    SERVICE="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("service",""))' 2>/dev/null || true)"
-    ROUTES_OK="$(printf '%s' "$OPENAPI" | "$PY" -c 'import json,sys; p=json.load(sys.stdin).get("paths",{}); required=["/matches/import-sofascore","/matches/{event_id}","/matches/{event_id}/period-capabilities","/matches/{event_id}/studio-match-stats","/canonical/metrics"]; print("yes" if all(x in p for x in required) else "no")' 2>/dev/null || echo no)"
-    if [ "$SERVICE" = "matchlab-api" ] && [ "$ROUTES_OK" = "yes" ]; then
+  if [ -n "$HEALTH" ] && [ -n "$FRONT_OK" ] && [ -n "$PROXY_OK" ]; then
+    SERVICE="$(printf '%s' "$PROXY_OK" | "$PY" -c 'import json,sys; print(json.load(sys.stdin).get("service",""))' 2>/dev/null || true)"
+    if [ "$SERVICE" = "matchlab-api" ]; then
       open "http://127.0.0.1:$FRONTEND_PORT"
       exit 0
     fi
@@ -96,4 +94,4 @@ for i in {1..60}; do
   sleep 1
 done
 
-fail_dialog "MatchLab did not finish starting its local API and frontend."
+fail_dialog "MatchLab did not finish starting its local API and frontend proxy."
