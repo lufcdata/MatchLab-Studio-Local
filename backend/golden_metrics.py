@@ -46,7 +46,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Penalties Won","sofascore":"Penalties Won","match_aliases":["Penalties won","Penalty won","Penalty awarded","Penalties awarded"],"match_keys":["penaltiesWon","penaltyWon","penaltyAwarded","penaltiesAwarded"],"player_keys":["penaltyWon","penaltiesWon","penaltyAwarded","penaltiesAwarded"],"default_zero":True},
     {"label":"Saves From Inside Box","sofascore":"Saves From Inside Box","match_aliases":["Saves from inside box","Saves inside box"],"match_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"],"player_keys":["savedShotsFromInsideTheBox","savesFromInsideBox"]},
     {"label":"High Claims","sofascore":"High Claims","match_aliases":["High claims"],"match_keys":["highClaims","goodHighClaim"],"player_keys":["highClaims","goodHighClaim"],"default_zero":True},
-    {"label":"Red Cards","sofascore":"Red Cards","match_aliases":["Red cards"],"match_keys":["redCards"],"player_keys":["redCards","redCard","directRedCards"]},
+    {"label":"Red Cards","sofascore":"Red Cards","match_aliases":["Red cards"],"match_keys":["redCards"],"player_keys":["redCards","redCard","directRedCards"],"default_zero":True},
     {"label":"Defensive Actions","sofascore":"Calculated: Tackles + Interceptions + Blocks + Clearances + Ball Recoveries + Aerial Duels + Fouls","match_keys":[],"player_keys":["totalTackle","wonTackle","tacklesWon","interceptionWon","interceptions","blockedScoringAttempt","blockedShots","blocks","totalClearance","clearances","ballRecovery","aerialWon","aerialDuelsWon","fouls"],"calculated":"defensive_actions"},
 ]
 
