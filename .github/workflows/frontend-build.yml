@@ -42,3 +42,33 @@ jobs:
               raise SystemExit(f'Expected exactly 33 Match Stats; found {count}')
           print('Frontend Match Stats contract: 33/33')
           PY
+      - name: Verify honest period controls and local-only imagery
+        working-directory: frontend
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('src/App.tsx').read_text()
+          required = [
+              '/period-capabilities',
+              'periodAvailability.first_half',
+              'periodAvailability.second_half',
+              'disabled={!periodAvailability.first_half}',
+              'disabled={!periodAvailability.second_half}',
+              '/team-logos/',
+              '/player-images/',
+          ]
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit(f'Missing Studio safety wiring: {missing}')
+          forbidden = [
+              'api.sofascore.com/api/v1/player',
+              'api.sofascore.com/api/v1/team',
+              'www.sofascore.com/api/v1/player',
+              'www.sofascore.com/api/v1/team',
+          ]
+          found = [item for item in forbidden if item in source]
+          if found:
+              raise SystemExit(f'Forbidden SofaScore imagery reference found: {found}')
+          print('Period capability controls and local-only imagery verified')
+          PY
