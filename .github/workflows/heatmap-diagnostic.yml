@@ -20,6 +20,8 @@ jobs:
           python-version: '3.12'
       - name: Install diagnostic dependency
         run: pip install curl-cffi
+      - name: Use current SofaScore requested-with value
+        run: sed -i 's/SOFASCORE_X_REQUESTED_WITH = "e06c91"/SOFASCORE_X_REQUESTED_WITH = "XMLHttpRequest"/' backend/diagnose_heatmap_box_touches.py
       - name: Run Leeds-Burnley heatmap diagnostic
         shell: bash
         run: |
