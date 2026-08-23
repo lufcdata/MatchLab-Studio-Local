@@ -75,6 +75,8 @@ def _first_number(stats: dict[str, Any], keys: list[str]) -> float | None:
         value=_number(stats.get(key))
         if value is not None: return value
     return None
+def _sum_if_present(*values: float | None) -> float | None:
+    return None if any(value is None for value in values) else sum(float(value) for value in values if value is not None)
 def _defensive_actions(stats: dict[str, Any]) -> float | None:
     values=[
         _first_number(stats,["totalTackle","wonTackle","tacklesWon"]),
@@ -103,8 +105,6 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
         all_won=_first_number(stats,["duelWon","totalDuelsWon"])
         aerial_won=_first_number(stats,["aerialWon","aerialDuelsWon"])
         if all_won is None: return None
-        # SofaScore's duelWon is all duels won. If aerial wins are absent, treating
-        # them as zero is safe for a participating player; clamp guards bad feeds.
         return max(0.0, all_won - (aerial_won or 0.0))
     if metric.get("calculated")=="big_chances":
         direct=_first_number(stats,metric.get("player_keys",[]))
@@ -127,7 +127,40 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
 def format_metric_value(value: float, metric: dict[str, Any]) -> str:
     if metric.get("label")=="xG": return f"{value:.2f}"
     text=str(int(value)) if float(value).is_integer() else f"{value:.1f}"; return f"{text}%" if metric.get("suffix")=="%" else text
-def format_player_metric(stats: dict[str, Any], metric: dict[str, Any], value: float) -> str: return format_metric_value(value,metric)
+def _fraction(value: float, total: float | None) -> str | None:
+    if total is None or total < value: return None
+    left=str(int(value)) if float(value).is_integer() else f"{value:.1f}"
+    right=str(int(total)) if float(total).is_integer() else f"{total:.1f}"
+    return f"{left}/{right}"
+def _aerial_total(stats: dict[str, Any]) -> float | None:
+    direct=_first_number(stats,["totalAerialDuels","aerialDuels","totalAerial","aerialDuelTotal"])
+    if direct is not None: return direct
+    return _sum_if_present(_first_number(stats,["aerialWon","aerialDuelsWon"]),_first_number(stats,["aerialLost","aerialDuelsLost"]))
+def _duel_total(stats: dict[str, Any]) -> float | None:
+    direct=_first_number(stats,["totalDuels","duels","duelTotal"])
+    if direct is not None: return direct
+    return _sum_if_present(_first_number(stats,["duelWon","totalDuelsWon"]),_first_number(stats,["duelLost","totalDuelsLost"]))
+def _ground_duel_total(stats: dict[str, Any]) -> float | None:
+    direct=_first_number(stats,["totalGroundDuels","groundDuels","groundDuelTotal"])
+    if direct is not None: return direct
+    won=_first_number(stats,["groundDuelWon","groundDuelsWon","groundDuelsWonCount"])
+    lost=_first_number(stats,["groundDuelLost","groundDuelsLost","groundDuelsLostCount"])
+    combined=_sum_if_present(won,lost)
+    if combined is not None: return combined
+    all_duels=_duel_total(stats); aerial=_aerial_total(stats)
+    return all_duels-aerial if all_duels is not None and aerial is not None and all_duels>=aerial else None
+def format_player_metric(stats: dict[str, Any], metric: dict[str, Any], value: float) -> str:
+    label=metric.get("label")
+    total: float | None=None
+    if label=="Successful Passes": total=_first_number(stats,["totalPass","totalPasses"])
+    elif label=="Accurate Crosses": total=_first_number(stats,["totalCross","totalCrosses","crosses"])
+    elif label=="Accurate Long Passes": total=_first_number(stats,["totalLongBalls","totalLongPasses","longBalls","longPasses"])
+    elif label=="Duels Won": total=_duel_total(stats)
+    elif label=="Ground Duels Won": total=_ground_duel_total(stats)
+    elif label=="Aerial Duels Won": total=_aerial_total(stats)
+    elif label=="Successful Final Third Passes": total=_first_number(stats,["totalFinalThirdPasses","finalThirdPasses","passesIntoFinalThird","passesInFinalThirdTotal"])
+    paired=_fraction(value,total)
+    return paired if paired is not None else format_metric_value(value,metric)
 def available_player_metrics(players) -> list[dict[str, Any]]:
     available=[]
     for metric in METRICS:
