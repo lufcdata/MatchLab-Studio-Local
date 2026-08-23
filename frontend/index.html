@@ -36,7 +36,9 @@
         right: 18px;
         bottom: 18px;
         z-index: 9999;
-        width: 300px;
+        width: 340px;
+        max-height: calc(100vh - 36px);
+        overflow: auto;
         padding: 14px 16px;
         border: 1px solid rgba(72,240,202,.35);
         border-radius: 8px;
@@ -50,6 +52,11 @@
       .heatmap-audit__player { margin: 5px 0 10px; color: #fff; font-size: 14px; font-weight: 800; }
       .heatmap-audit__grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; color: #8c91a6; }
       .heatmap-audit__grid strong { color: #fff; font-size: 14px; }
+      .heatmap-audit__coords { margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.08); }
+      .heatmap-audit__coords-title { color: #8c91a6; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+      .heatmap-audit__coords-list { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+      .heatmap-audit__coord { padding: 3px 6px; border-radius: 4px; background: #242737; color: #fff; font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .heatmap-audit__bounds { margin-top: 7px; color: #73788c; font: 600 9px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
       .heatmap-audit__target { margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,.08); color: #73788c; font-size: 10px; }
       .heatmap-audit__error { color: #ff8f8f; }
     </style>
@@ -83,8 +90,14 @@
           const section = sections.find(s => /PLAYER/.test((s.querySelector('.panel-section__heading')?.textContent || '').toUpperCase()));
           return section ? section.querySelector('select.studio-select') : null;
         };
+        const fmt = (v) => Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '—';
         const render = (data) => {
           const direct = data.direct_opposition_box_touches == null ? '—' : data.direct_opposition_box_touches;
+          const points = Array.isArray(data.derived_box_points) ? data.derived_box_points : [];
+          const coords = points.length
+            ? points.map((p, i) => `<span class="heatmap-audit__coord">#${i + 1} x:${fmt(p.x)} y:${fmt(p.y)}</span>`).join('')
+            : '<span class="heatmap-audit__coord">none</span>';
+          const b = data.penalty_area_bounds || {};
           panel.innerHTML = `
             <div class="heatmap-audit__title">Heatmap Audit</div>
             <div class="heatmap-audit__player">${data.player.name}</div>
@@ -93,6 +106,11 @@
               <span>Heatmap Points</span><strong>${data.heatmap_points}</strong>
               <span>Derived Box Touches</span><strong>${data.derived_opposition_box_touches}</strong>
               <span>Direct SofaScore Field</span><strong>${direct}</strong>
+            </div>
+            <div class="heatmap-audit__coords">
+              <div class="heatmap-audit__coords-title">Points currently counted in box</div>
+              <div class="heatmap-audit__coords-list">${coords}</div>
+              <div class="heatmap-audit__bounds">Current bounds: x ${fmt(b.x_min)}→${fmt(b.x_max)} · y ${fmt(b.y_min)}→${fmt(b.y_max)}</div>
             </div>
             <div class="heatmap-audit__target">Validation: Okafor 40 touches / 4 box touches · Calvert-Lewin 26 / 2</div>`;
           panel.hidden = false;
