@@ -22,6 +22,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Successful Passes","sofascore":"Accurate Passes","match_aliases":["Accurate passes"],"match_keys":["accuratePasses"],"player_keys":["accuratePass","accuratePasses"]},
     {"label":"Total Passes","sofascore":"Passes","match_aliases":["Total passes"],"match_keys":["passes","totalPasses"],"player_keys":["totalPass","totalPasses"]},
     {"label":"Successful Final Third Passes","sofascore":"Passes In Final Third","match_aliases":["Passes in final third"],"match_keys":["finalThirdPhaseStatistic","accurateFinalThirdPasses","passesInFinalThird"],"player_keys":["accurateFinalThirdPasses","successfulFinalThirdPasses","passesInFinalThird"]},
+    {"label":"Final Third Passes","sofascore":"Passes Into Final Third","match_aliases":["Passes into final third","Final third passes"],"match_keys":["passesIntoFinalThird","totalFinalThirdPasses"],"player_keys":["passesIntoFinalThird","totalFinalThirdPasses"]},
     {"label":"Pass Accuracy","sofascore":"Pass Accuracy","match_aliases":["Pass accuracy","Passing accuracy","Accurate passes percentage","Accurate passes %"],"match_keys":["passAccuracy","accuratePassesPercentage","accuratePassPercentage","passAccuracyPercentage"],"player_keys":["passAccuracy","accuratePassPercentage","accuratePassesPercentage","passAccuracyPercentage"],"suffix":"%"},
     {"label":"Ball Carries","sofascore":"Carries","match_aliases":["Ball carries","Total carries"],"match_keys":["ballCarriesCount","ballCarries","carries","totalCarries"],"player_keys":["ballCarriesCount","ballCarries","carries","totalCarries"]},
     {"label":"Progressive Carries","sofascore":"Progressive Carries","match_aliases":["Progressive carries","Progressive ball carries"],"match_keys":["progressiveBallCarriesCount","progressiveBallCarries","progressiveCarries"],"player_keys":["progressiveBallCarriesCount","progressiveBallCarries","progressiveCarries"]},
@@ -78,15 +79,7 @@ def _first_number(stats: dict[str, Any], keys: list[str]) -> float | None:
 def _sum_if_present(*values: float | None) -> float | None:
     return None if any(value is None for value in values) else sum(float(value) for value in values if value is not None)
 def _defensive_actions(stats: dict[str, Any]) -> float | None:
-    values=[
-        _first_number(stats,["totalTackle","wonTackle","tacklesWon"]),
-        _first_number(stats,["interceptionWon","interceptions"]),
-        _first_number(stats,["blockedScoringAttempt","blockedShots","blocks"]),
-        _first_number(stats,["totalClearance","clearances"]),
-        _first_number(stats,["ballRecovery"]),
-        _first_number(stats,["aerialWon","aerialDuelsWon"]),
-        _first_number(stats,["fouls"]),
-    ]
+    values=[_first_number(stats,["totalTackle","wonTackle","tacklesWon"]),_first_number(stats,["interceptionWon","interceptions"]),_first_number(stats,["blockedScoringAttempt","blockedShots","blocks"]),_first_number(stats,["totalClearance","clearances"]),_first_number(stats,["ballRecovery"]),_first_number(stats,["aerialWon","aerialDuelsWon"]),_first_number(stats,["fouls"])]
     if all(value is None for value in values): return None
     return sum(value or 0.0 for value in values)
 def _looks_goalkeeper(stats: dict[str, Any]) -> bool:
@@ -102,15 +95,13 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
     if metric.get("calculated")=="ground_duels_won":
         direct=_first_number(stats,metric.get("player_keys",[]))
         if direct is not None: return direct
-        all_won=_first_number(stats,["duelWon","totalDuelsWon"])
-        aerial_won=_first_number(stats,["aerialWon","aerialDuelsWon"])
+        all_won=_first_number(stats,["duelWon","totalDuelsWon"]); aerial_won=_first_number(stats,["aerialWon","aerialDuelsWon"])
         if all_won is None: return None
         return max(0.0, all_won - (aerial_won or 0.0))
     if metric.get("calculated")=="big_chances":
         direct=_first_number(stats,metric.get("player_keys",[]))
         if direct is not None: return direct
-        scored=_first_number(stats,["bigChanceScored","bigChancesScored"])
-        missed=_first_number(stats,["bigChanceMissed","bigChancesMissed"])
+        scored=_first_number(stats,["bigChanceScored","bigChancesScored"]); missed=_first_number(stats,["bigChanceMissed","bigChancesMissed"])
         if scored is not None or missed is not None: return (scored or 0.0)+(missed or 0.0)
         return 0.0 if metric.get("default_zero") and _has_participated(stats) else None
     for key in metric.get("player_keys",[]):
@@ -120,8 +111,7 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
         accurate=_number(stats.get("accuratePass")); accurate=_number(stats.get("accuratePasses")) if accurate is None else accurate
         total=_number(stats.get("totalPass")); total=_number(stats.get("totalPasses")) if total is None else total
         if accurate is not None and total and total>0: return accurate/total*100.0
-    if metric.get("label")=="High Claims" and metric.get("default_zero"):
-        return 0.0 if _looks_goalkeeper(stats) and _has_participated(stats) else None
+    if metric.get("label")=="High Claims" and metric.get("default_zero"): return 0.0 if _looks_goalkeeper(stats) and _has_participated(stats) else None
     if metric.get("default_zero"): return 0.0 if _has_participated(stats) else None
     return None
 def format_metric_value(value: float, metric: dict[str, Any]) -> str:
@@ -129,8 +119,7 @@ def format_metric_value(value: float, metric: dict[str, Any]) -> str:
     text=str(int(value)) if float(value).is_integer() else f"{value:.1f}"; return f"{text}%" if metric.get("suffix")=="%" else text
 def _fraction(value: float, total: float | None) -> str | None:
     if total is None or total < value: return None
-    left=str(int(value)) if float(value).is_integer() else f"{value:.1f}"
-    right=str(int(total)) if float(total).is_integer() else f"{total:.1f}"
+    left=str(int(value)) if float(value).is_integer() else f"{value:.1f}"; right=str(int(total)) if float(total).is_integer() else f"{total:.1f}"
     return f"{left}/{right}"
 def _aerial_total(stats: dict[str, Any]) -> float | None:
     direct=_first_number(stats,["totalAerialDuels","aerialDuels","totalAerial","aerialDuelTotal"])
@@ -143,15 +132,13 @@ def _duel_total(stats: dict[str, Any]) -> float | None:
 def _ground_duel_total(stats: dict[str, Any]) -> float | None:
     direct=_first_number(stats,["totalGroundDuels","groundDuels","groundDuelTotal"])
     if direct is not None: return direct
-    won=_first_number(stats,["groundDuelWon","groundDuelsWon","groundDuelsWonCount"])
-    lost=_first_number(stats,["groundDuelLost","groundDuelsLost","groundDuelsLostCount"])
+    won=_first_number(stats,["groundDuelWon","groundDuelsWon","groundDuelsWonCount"]); lost=_first_number(stats,["groundDuelLost","groundDuelsLost","groundDuelsLostCount"])
     combined=_sum_if_present(won,lost)
     if combined is not None: return combined
     all_duels=_duel_total(stats); aerial=_aerial_total(stats)
     return all_duels-aerial if all_duels is not None and aerial is not None and all_duels>=aerial else None
 def format_player_metric(stats: dict[str, Any], metric: dict[str, Any], value: float) -> str:
-    label=metric.get("label")
-    total: float | None=None
+    label=metric.get("label"); total: float | None=None
     if label=="Successful Passes": total=_first_number(stats,["totalPass","totalPasses"])
     elif label=="Accurate Crosses": total=_first_number(stats,["totalCross","totalCrosses","crosses"])
     elif label=="Accurate Long Passes": total=_first_number(stats,["totalLongBalls","totalLongPasses","longBalls","longPasses"])
