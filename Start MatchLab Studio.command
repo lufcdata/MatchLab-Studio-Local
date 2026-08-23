@@ -11,6 +11,7 @@ fail_dialog(){ osascript -e "display dialog \"$1\" buttons {\"OK\"} default butt
 # MatchLab is fully self-contained. No other repository is cloned, fetched or imported.
 [ -f "$BACKEND/main.py" ] || fail_dialog "MatchLab backend is missing. Please Fetch/Pull the latest MatchLab Studio first."
 [ -f "$BACKEND/golden_metrics.py" ] || fail_dialog "MatchLab Golden metrics file is missing. Please Fetch/Pull the latest MatchLab Studio first."
+[ -f "$BACKEND/server.py" ] || fail_dialog "MatchLab API wrapper is missing. Please Fetch/Pull the latest MatchLab Studio first."
 
 # Wire in only the crests/player images supplied for MatchLab.
 TEAM_ASSET_DIR="$STUDIO_ROOT/assets/team_logos"
@@ -62,7 +63,7 @@ FRONTEND_PORT="$(find_free_port 5173 5273 || true)"
 
 cd "$BACKEND"
 : > /tmp/matchlab-backend.log
-nohup "$PY" -m uvicorn main:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
+nohup "$PY" -m uvicorn server:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
 BACKEND_PID=$!
 sleep 1
 if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then LAST_LINE="$(tail -1 /tmp/matchlab-backend.log 2>/dev/null | tr '"' "'" | cut -c1-220)"; [ -n "$LAST_LINE" ] || LAST_LINE="The backend process exited before reporting an error."; fail_dialog "The MatchLab local backend could not start. Last backend message: $LAST_LINE"; fi
