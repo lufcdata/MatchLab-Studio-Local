@@ -1,0 +1,21 @@
+name: Heatmap diagnostic
+
+on:
+  push:
+    paths:
+      - 'backend/diagnose_heatmap_box_touches.py'
+      - '.github/workflows/heatmap-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install diagnostic dependency
+        run: pip install curl-cffi
+      - name: Run Leeds-Burnley heatmap diagnostic
+        run: python backend/diagnose_heatmap_box_touches.py
