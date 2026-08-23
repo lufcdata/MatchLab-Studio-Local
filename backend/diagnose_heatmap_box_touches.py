@@ -8,6 +8,7 @@ BASES = [
     "https://api.sofascore.com/api/v1",
     "https://www.sofascore.com/api/v1",
 ]
+SOFASCORE_X_REQUESTED_WITH = "e06c91"
 TARGET_DATE = "2026-05-01"
 TARGET_HOME = "Leeds United"
 TARGET_AWAY = "Burnley"
@@ -34,6 +35,10 @@ def get_json(path: str) -> dict[str, Any]:
                     "Accept-Language": "en-GB,en;q=0.9",
                     "Origin": "https://www.sofascore.com",
                     "Referer": "https://www.sofascore.com/",
+                    "X-Requested-With": SOFASCORE_X_REQUESTED_WITH,
+                    "Sec-Fetch-Site": "same-site",
+                    "Sec-Fetch-Mode": "cors",
+                    "Sec-Fetch-Dest": "empty",
                     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
                 },
             )
