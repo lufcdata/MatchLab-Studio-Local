@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import json
+import re
+from html import unescape
 from typing import Any
 
 from curl_cffi import requests
 
-
-FOTMOB_MATCH_DETAILS_URL = "https://www.fotmob.com/api/data/matchDetails"
 
 TARGET_KEYS = {
     "touches_opp_box": "Opposition Box Touches",
@@ -15,24 +16,33 @@ TARGET_KEYS = {
 }
 
 
-def fetch_match_details(match_id: str) -> dict[str, Any]:
-    """Fetch FotMob match details for diagnostics only.
+def fetch_match_details(match_id: str, match_url: str | None = None) -> dict[str, Any]:
+    """Fetch FotMob's page-embedded match payload for diagnostics only.
 
-    This module deliberately does not mutate MatchLab's Golden data. It exists
-    so we can prove the supplementary source before wiring it into production.
+    FotMob's current match pages expose the playerStats payload in __NEXT_DATA__.
+    This avoids relying on the older unauthenticated API route. Nothing here
+    mutates MatchLab's Golden data.
     """
+    url = match_url or f"https://www.fotmob.com/match/{match_id}"
     response = requests.get(
-        FOTMOB_MATCH_DETAILS_URL,
-        params={"matchId": str(match_id)},
+        url,
         impersonate="chrome",
         timeout=20,
         headers={
-            "Accept": "application/json, text/plain, */*",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Referer": "https://www.fotmob.com/",
         },
     )
     response.raise_for_status()
-    return response.json()
+    html = response.text
+    match = re.search(
+        r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+        html,
+        re.I | re.S,
+    )
+    if not match:
+        raise RuntimeError("FotMob page did not expose a __NEXT_DATA__ match payload")
+    return json.loads(unescape(match.group(1)))
 
 
 def _stat_value(stat: Any) -> Any:
@@ -121,8 +131,8 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def diagnostic(match_id: str) -> dict[str, Any]:
-    payload = fetch_match_details(match_id)
+def diagnostic(match_id: str, match_url: str | None = None) -> dict[str, Any]:
+    payload = fetch_match_details(match_id, match_url)
     rows = extract_player_rows(payload)
     return {
         "source": "FotMob",
