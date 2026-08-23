@@ -1,14 +1,14 @@
 GET https://api.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01 -> HTTP 403
 GET https://www.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01 -> HTTP 403
 Traceback (most recent call last):
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 169, in <module>
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 174, in <module>
     main()
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 122, in main
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 127, in main
     event = find_target_event()
             ^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 55, in find_target_event
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 60, in find_target_event
     payload = get_json(f"sport/football/scheduled-events/{TARGET_DATE}")
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 47, in get_json
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 52, in get_json
     raise RuntimeError("All SofaScore API hosts failed: " + " | ".join(errors))
 RuntimeError: All SofaScore API hosts failed: https://api.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01: HTTP 403 {"error": {"code": 403, "reason": "Forbidden" }} | https://www.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01: HTTP 403 {"error": {"code": 403, "reason": "Forbidden" }}
