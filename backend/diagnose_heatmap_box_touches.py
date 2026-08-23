@@ -4,7 +4,10 @@ from typing import Any
 
 from curl_cffi import requests
 
-BASE = "https://www.sofascore.com/api/v1"
+BASES = [
+    "https://api.sofascore.com/api/v1",
+    "https://www.sofascore.com/api/v1",
+]
 TARGET_DATE = "2026-05-01"
 TARGET_HOME = "Leeds United"
 TARGET_AWAY = "Burnley"
@@ -18,15 +21,30 @@ BOX_Y_MAX = 100.0 - BOX_Y_MIN
 
 
 def get_json(path: str) -> dict[str, Any]:
-    url = f"{BASE}/{path.lstrip('/')}"
-    response = requests.get(
-        url,
-        impersonate="chrome",
-        timeout=30,
-        headers={"Accept": "application/json", "Referer": "https://www.sofascore.com/"},
-    )
-    response.raise_for_status()
-    return response.json()
+    errors: list[str] = []
+    for base in BASES:
+        url = f"{base}/{path.lstrip('/')}"
+        try:
+            response = requests.get(
+                url,
+                impersonate="chrome",
+                timeout=30,
+                headers={
+                    "Accept": "application/json, text/plain, */*",
+                    "Accept-Language": "en-GB,en;q=0.9",
+                    "Origin": "https://www.sofascore.com",
+                    "Referer": "https://www.sofascore.com/",
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                },
+            )
+            print(f"GET {url} -> HTTP {response.status_code}")
+            if response.status_code == 200:
+                return response.json()
+            preview = (response.text or "")[:180].replace("\n", " ")
+            errors.append(f"{url}: HTTP {response.status_code} {preview}")
+        except Exception as exc:
+            errors.append(f"{url}: {type(exc).__name__}: {exc}")
+    raise RuntimeError("All SofaScore API hosts failed: " + " | ".join(errors))
 
 
 def event_name(event: dict[str, Any], side: str) -> str:
