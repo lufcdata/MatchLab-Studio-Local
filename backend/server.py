@@ -14,8 +14,16 @@ from main import DATA_DIR, ImportRequest, METRICS, app, import_sofascore
 from fotmob_diagnostic import diagnostic
 
 
-# FotMob-only supplementary player metrics. Appending to the shared METRICS list
-# makes them available to the existing Player and Metric Leaders pipelines.
+# Canonicalise the FotMob supplement metrics before any API catalog or player
+# endpoint reads METRICS. Keep Successful Final Third Passes separate: this field
+# is the total number of passes into the final third, not the successful subset.
+for _existing in METRICS:
+    if _existing.get("label") == "Final Third Passes":
+        _existing["label"] = "Passes Into Final Third"
+        _existing["sofascore"] = "FotMob supplement"
+        _existing["player_keys"] = ["passesIntoFinalThird", "totalFinalThirdPasses"]
+        break
+
 for _metric in (
     {"label":"Line-Breaking Passes","sofascore":"FotMob supplement","match_keys":[],"player_keys":["lineBreakingPasses"]},
     {"label":"Headed Clearances","sofascore":"FotMob supplement","match_keys":[],"player_keys":["headedClearances"]},
