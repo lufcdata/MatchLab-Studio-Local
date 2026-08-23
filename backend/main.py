@@ -83,6 +83,23 @@ def _players(payload: dict[str, Any]) -> list[dict[str, Any]]:
             p=row.get("player",{}) or {}; stats=row.get("statistics",{}) or {}
             if p.get("name"): out.append({"id":str(p.get("id",p.get("slug",p["name"]))),"name":p["name"],"team":team,"opponent":opp,"side":side,"stats":stats})
     return out
+def _heatmap_points(event_id: str, player_id: str) -> list[dict[str, float]]:
+    data=_get_json(f"event/{event_id}/player/{player_id}/heatmap")
+    raw=data.get("heatmap",[]) if isinstance(data,dict) else []
+    points=[]
+    for point in raw or []:
+        if not isinstance(point,dict): continue
+        x=_number(point.get("x")); y=_number(point.get("y"))
+        if x is None or y is None: continue
+        points.append({"x":x,"y":y})
+    return points
+def _is_opposition_box_point(point: dict[str, float]) -> bool:
+    # Standard 105 x 68 m pitch, expressed on SofaScore's normalized 0-100
+    # player heatmap plane. Player heatmaps are attack-normalized toward x=100.
+    box_x_min=(105.0-16.5)/105.0*100.0
+    box_y_min=((68.0-40.32)/2.0)/68.0*100.0
+    box_y_max=100.0-box_y_min
+    return point["x"]>=box_x_min and box_y_min<=point["y"]<=box_y_max
 def _period_rows(payload: dict[str, Any], period: str) -> list[dict[str, Any]]:
     code={"full":"ALL","first_half":"1ST","second_half":"2ND"}[period]; aliases={"ALL":{"ALL"},"1ST":{"1ST","FIRST"},"2ND":{"2ND","SECOND"}}
     block=next((b for b in payload.get("statistics",{}).get("statistics",[]) or [] if str(b.get("period","")).upper() in aliases[code]),None)
@@ -174,6 +191,18 @@ def player_stats(event_id:str,player_id:str):
     p=next((p for p in _players(_load(event_id)) if p["id"]==str(player_id)),None)
     if not p:raise HTTPException(404,"Player not found")
     rows,minutes=build_canonical_player_rows(p["stats"],hide_zero=False);return {"player":{"player_id":p["id"],"name":p["name"],"team":p["team"],"opponent":p["opponent"],"side":p["side"]},"rows":rows,"minutes":minutes}
+@app.get("/matches/{event_id}/players/{player_id}/heatmap-audit")
+def player_heatmap_audit(event_id:str,player_id:str):
+    payload=_load(event_id);p=next((p for p in _players(payload) if p["id"]==str(player_id)),None)
+    if not p:raise HTTPException(404,"Player not found")
+    points=_heatmap_points(event_id,str(player_id));box_points=[point for point in points if _is_opposition_box_point(point)]
+    official_touches=_number(p["stats"].get("touches"));official_touches=_number(p["stats"].get("totalTouches")) if official_touches is None else official_touches
+    direct_box=None
+    for key in ("touchesInOppBox","touchesInOppositionBox","penaltyBoxTouches","touchesInPenaltyArea","touchesInPenaltyBox","touchesInsideOppositionBox"):
+        direct_box=_number(p["stats"].get(key))
+        if direct_box is not None:break
+    box_x_min=(105.0-16.5)/105.0*100.0;box_y_min=((68.0-40.32)/2.0)/68.0*100.0
+    return {"event_id":event_id,"player":{"id":p["id"],"name":p["name"],"team":p["team"]},"official_touches":official_touches,"direct_opposition_box_touches":direct_box,"heatmap_points":len(points),"derived_opposition_box_touches":len(box_points),"penalty_area_bounds":{"x_min":box_x_min,"x_max":100.0,"y_min":box_y_min,"y_max":100.0-box_y_min},"derived_box_points":box_points}
 @app.get("/matches/{event_id}/canonical-leaders/{metric_key_value}")
 def leaders(event_id:str,metric_key_value:str,period:str=Query("full"),scope:str=Query("all"),limit:int=Query(20,ge=1,le=50)):
     if period!="full":raise HTTPException(400,"Metric Leader period data is only available for the full match from this SofaScore feed.")
