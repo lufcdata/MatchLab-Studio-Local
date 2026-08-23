@@ -7,6 +7,9 @@ on:
       - '.github/workflows/heatmap-diagnostic.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   diagnose:
     runs-on: ubuntu-latest
@@ -18,4 +21,16 @@ jobs:
       - name: Install diagnostic dependency
         run: pip install curl-cffi
       - name: Run Leeds-Burnley heatmap diagnostic
-        run: python backend/diagnose_heatmap_box_touches.py
+        run: python backend/diagnose_heatmap_box_touches.py | tee backend/heatmap_diagnostic_result.txt
+      - name: Commit diagnostic result
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/heatmap_diagnostic_result.txt
+          if git diff --cached --quiet; then
+            echo "No diagnostic result change"
+          else
+            git commit -m "Record heatmap diagnostic result"
+            git push
+          fi
