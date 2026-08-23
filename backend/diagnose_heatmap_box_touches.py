@@ -8,7 +8,7 @@ BASES = [
     "https://api.sofascore.com/api/v1",
     "https://www.sofascore.com/api/v1",
 ]
-SOFASCORE_X_REQUESTED_WITH = "e06c91"
+SOFASCORE_X_REQUESTED_WITH = "XMLHttpRequest"
 TARGET_DATE = "2026-05-01"
 TARGET_HOME = "Leeds United"
 TARGET_AWAY = "Burnley"
