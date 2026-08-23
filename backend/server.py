@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+from typing import Dict, Optional
 
 from fastapi import HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -10,14 +11,14 @@ from main import app
 from fotmob_diagnostic import diagnostic
 
 
-def _fotmob_result(match_id: str, url: str | None = None):
+def _fotmob_result(match_id: str, url: Optional[str] = None):
     try:
         result = diagnostic(match_id, url)
     except Exception as exc:
         raise HTTPException(502, f"FotMob diagnostic failed: {exc}") from exc
 
     players = result.get("players", [])
-    team_totals: dict[str, dict[str, float]] = {}
+    team_totals: Dict[str, Dict[str, float]] = {}
     for player in players:
         team = str(player.get("team") or "Unknown")
         totals = team_totals.setdefault(team, {})
@@ -35,13 +36,13 @@ def _fotmob_result(match_id: str, url: str | None = None):
 
 
 @app.get("/audit/fotmob/{match_id}")
-def fotmob_audit(match_id: str, url: str | None = Query(default=None)):
+def fotmob_audit(match_id: str, url: Optional[str] = Query(default=None)):
     """Diagnostic-only FotMob player-stat audit. Never mutates Golden data."""
     return _fotmob_result(match_id, url)
 
 
 @app.get("/audit/fotmob-view/{match_id}", response_class=HTMLResponse)
-def fotmob_audit_view(match_id: str, url: str | None = Query(default=None)):
+def fotmob_audit_view(match_id: str, url: Optional[str] = Query(default=None)):
     """Visible audit screen for proving FotMob supplementary player values."""
     try:
         result = _fotmob_result(match_id, url)
