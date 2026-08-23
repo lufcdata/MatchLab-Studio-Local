@@ -21,7 +21,11 @@ jobs:
       - name: Install diagnostic dependency
         run: pip install curl-cffi
       - name: Run Leeds-Burnley heatmap diagnostic
-        run: python backend/diagnose_heatmap_box_touches.py | tee backend/heatmap_diagnostic_result.txt
+        shell: bash
+        run: |
+          set +e
+          python backend/diagnose_heatmap_box_touches.py 2>&1 | tee backend/heatmap_diagnostic_result.txt
+          exit 0
       - name: Commit diagnostic result
         if: always()
         run: |
