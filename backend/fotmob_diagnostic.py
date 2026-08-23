@@ -17,12 +17,7 @@ TARGET_KEYS = {
 
 
 def fetch_match_details(match_id: str, match_url: str | None = None) -> dict[str, Any]:
-    """Fetch FotMob's page-embedded match payload for diagnostics only.
-
-    FotMob's current match pages expose the playerStats payload in __NEXT_DATA__.
-    This avoids relying on the older unauthenticated API route. Nothing here
-    mutates MatchLab's Golden data.
-    """
+    """Fetch FotMob's page-embedded match payload for diagnostics only."""
     url = match_url or f"https://www.fotmob.com/match/{match_id}"
     response = requests.get(
         url,
@@ -55,7 +50,6 @@ def _stat_value(stat: Any) -> Any:
 
 
 def _collect_stats(node: Any, out: dict[str, Any]) -> None:
-    """Recursively collect FotMob stat objects by their stable raw key."""
     if isinstance(node, dict):
         key = node.get("key")
         if isinstance(key, str) and key in TARGET_KEYS:
@@ -80,7 +74,6 @@ def _collect_stats(node: Any, out: dict[str, Any]) -> None:
 
 
 def _player_name(value: Any) -> str:
-    """Normalize FotMob's string and structured player-name variants."""
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, dict):
@@ -106,15 +99,20 @@ def _looks_like_player(node: dict[str, Any]) -> bool:
     )
 
 
-def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Find and merge unique player rows containing at least one target stat.
+def _identity_key(name: str, team: str | None) -> tuple[str, str]:
+    """Canonical fallback identity for duplicate FotMob representations.
 
-    FotMob can expose the same player in more than one nested structure, and one
-    copy can use a structured name object while another uses a plain string.
-    The stable player ID is therefore the primary identity. Duplicate copies are
-    merged so complementary target stats are retained without double-counting.
+    Some nested FotMob structures use different IDs for the same footballer.
+    Within a single match, normalized player name + team is safe for merging.
     """
-    rows_by_id: dict[str, dict[str, Any]] = {}
+    normalized_name = " ".join(name.casefold().split())
+    normalized_team = " ".join((team or "").casefold().split())
+    return normalized_name, normalized_team
+
+
+def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Find and merge unique player rows containing target FotMob stats."""
+    rows_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
 
     def walk(node: Any, team: str | None = None) -> None:
         if isinstance(node, dict):
@@ -131,18 +129,19 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 if stats:
                     player_id = str(node.get("id", node.get("playerId", node.get("player_id", ""))))
                     name = _player_name(node.get("name"))
-                    existing = rows_by_id.get(player_id)
+                    identity = _identity_key(name, local_team)
+                    existing = rows_by_identity.get(identity)
                     if existing is None:
-                        rows_by_id[player_id] = {
+                        rows_by_identity[identity] = {
                             "id": player_id,
                             "name": name,
                             "team": local_team,
                             "raw_keys": dict(stats),
                         }
                     else:
-                        # Prefer a clean human-readable name/team and merge any
-                        # target fields found only in another copy of the player.
-                        if name and (not existing.get("name") or str(existing.get("name")).startswith("{")):
+                        # Same footballer can appear under alternate nested IDs.
+                        # Merge fields, but never sum duplicate copies.
+                        if name and not existing.get("name"):
                             existing["name"] = name
                         if local_team and not existing.get("team"):
                             existing["team"] = local_team
@@ -157,7 +156,7 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     walk(payload)
 
     rows: list[dict[str, Any]] = []
-    for row in rows_by_id.values():
+    for row in rows_by_identity.values():
         raw_keys = row.get("raw_keys", {})
         row["stats"] = {
             TARGET_KEYS[key]: value
