@@ -79,9 +79,25 @@ def _collect_stats(node: Any, out: dict[str, Any]) -> None:
             _collect_stats(item, out)
 
 
+def _player_name(value: Any) -> str:
+    """Normalize FotMob's string and structured player-name variants."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        full = value.get("fullName") or value.get("displayName")
+        if isinstance(full, str) and full.strip():
+            return full.strip()
+        first = value.get("firstName")
+        last = value.get("lastName")
+        joined = " ".join(str(part).strip() for part in (first, last) if part)
+        if joined:
+            return joined
+    return str(value or "").strip()
+
+
 def _looks_like_player(node: dict[str, Any]) -> bool:
     return bool(
-        node.get("name")
+        _player_name(node.get("name"))
         and (
             node.get("id") is not None
             or node.get("playerId") is not None
@@ -91,16 +107,21 @@ def _looks_like_player(node: dict[str, Any]) -> bool:
 
 
 def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Find player-shaped nodes that contain at least one target stat."""
-    rows: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    """Find and merge unique player rows containing at least one target stat.
+
+    FotMob can expose the same player in more than one nested structure, and one
+    copy can use a structured name object while another uses a plain string.
+    The stable player ID is therefore the primary identity. Duplicate copies are
+    merged so complementary target stats are retained without double-counting.
+    """
+    rows_by_id: dict[str, dict[str, Any]] = {}
 
     def walk(node: Any, team: str | None = None) -> None:
         if isinstance(node, dict):
             local_team = team
             team_obj = node.get("team")
             if isinstance(team_obj, dict) and team_obj.get("name"):
-                local_team = str(team_obj["name"])
+                local_team = _player_name(team_obj.get("name"))
             elif isinstance(node.get("teamName"), str):
                 local_team = node["teamName"]
 
@@ -109,17 +130,23 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 _collect_stats(node, stats)
                 if stats:
                     player_id = str(node.get("id", node.get("playerId", node.get("player_id", ""))))
-                    name = str(node.get("name"))
-                    identity = (player_id, name)
-                    if identity not in seen:
-                        seen.add(identity)
-                        rows.append({
+                    name = _player_name(node.get("name"))
+                    existing = rows_by_id.get(player_id)
+                    if existing is None:
+                        rows_by_id[player_id] = {
                             "id": player_id,
                             "name": name,
                             "team": local_team,
-                            "stats": {TARGET_KEYS[key]: value for key, value in stats.items()},
-                            "raw_keys": stats,
-                        })
+                            "raw_keys": dict(stats),
+                        }
+                    else:
+                        # Prefer a clean human-readable name/team and merge any
+                        # target fields found only in another copy of the player.
+                        if name and (not existing.get("name") or str(existing.get("name")).startswith("{")):
+                            existing["name"] = name
+                        if local_team and not existing.get("team"):
+                            existing["team"] = local_team
+                        existing.setdefault("raw_keys", {}).update(stats)
 
             for value in node.values():
                 walk(value, local_team)
@@ -128,6 +155,16 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 walk(item, team)
 
     walk(payload)
+
+    rows: list[dict[str, Any]] = []
+    for row in rows_by_id.values():
+        raw_keys = row.get("raw_keys", {})
+        row["stats"] = {
+            TARGET_KEYS[key]: value
+            for key, value in raw_keys.items()
+            if key in TARGET_KEYS
+        }
+        rows.append(row)
     return rows
 
 
