@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'backend/diagnose_heatmap_box_touches.py'
+      - 'backend/heatmap-diagnostic.trigger'
       - '.github/workflows/heatmap-diagnostic.yml'
   workflow_dispatch:
 
