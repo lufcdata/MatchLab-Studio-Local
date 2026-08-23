@@ -1,14 +1,14 @@
+GET https://api.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01 -> HTTP 403
+GET https://www.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01 -> HTTP 403
 Traceback (most recent call last):
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 151, in <module>
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 169, in <module>
     main()
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 104, in main
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 122, in main
     event = find_target_event()
             ^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 37, in find_target_event
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 55, in find_target_event
     payload = get_json(f"sport/football/scheduled-events/{TARGET_DATE}")
               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 28, in get_json
-    response.raise_for_status()
-  File "/opt/hostedtoolcache/Python/3.12.14/x64/lib/python3.12/site-packages/curl_cffi/requests/models.py", line 241, in raise_for_status
-    raise HTTPError(f"HTTP Error {self.status_code}: {self.reason}", 0, self)
-curl_cffi.requests.exceptions.HTTPError: HTTP Error 403: 
+  File "/home/runner/work/MatchLab-Studio-Local/MatchLab-Studio-Local/backend/diagnose_heatmap_box_touches.py", line 47, in get_json
+    raise RuntimeError("All SofaScore API hosts failed: " + " | ".join(errors))
+RuntimeError: All SofaScore API hosts failed: https://api.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01: HTTP 403 {"error": {"code": 403, "reason": "Forbidden" }} | https://www.sofascore.com/api/v1/sport/football/scheduled-events/2026-05-01: HTTP 403 {"error": {"code": 403, "reason": "Forbidden" }}
