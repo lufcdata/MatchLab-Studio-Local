@@ -60,7 +60,15 @@ def _event_id(source: str) -> str:
 def _get_json(path: str) -> dict[str, Any]:
     url = f"https://www.sofascore.com/api/v1/{path.lstrip('/')}"
     try:
-        r = requests.get(url, impersonate="chrome", timeout=20, headers={"Accept":"application/json","Referer":"https://www.sofascore.com/"})
+        r = requests.get(url, impersonate="chrome", timeout=20, headers={
+            "Accept":"application/json, text/plain, */*",
+            "Origin":"https://www.sofascore.com",
+            "Referer":"https://www.sofascore.com/",
+            "X-Requested-With":"XMLHttpRequest",
+            "Sec-Fetch-Site":"same-origin",
+            "Sec-Fetch-Mode":"cors",
+            "Sec-Fetch-Dest":"empty",
+        })
         if r.status_code != 200: raise RuntimeError(f"SofaScore returned HTTP {r.status_code}")
         return r.json()
     except Exception as exc: raise HTTPException(502, f"SofaScore import failed: {exc}") from exc
@@ -100,6 +108,15 @@ def _is_opposition_box_point(point: dict[str, float]) -> bool:
     box_y_min=((68.0-40.32)/2.0)/68.0*100.0
     box_y_max=100.0-box_y_min
     return point["x"]>=box_x_min and box_y_min<=point["y"]<=box_y_max
+def _heatmap_audit_result(event_id:str,p:dict[str,Any])->dict[str,Any]:
+    points=_heatmap_points(event_id,str(p["id"]));box_points=[point for point in points if _is_opposition_box_point(point)]
+    official_touches=_number(p["stats"].get("touches"));official_touches=_number(p["stats"].get("totalTouches")) if official_touches is None else official_touches
+    direct_box=None
+    for key in ("touchesInOppBox","touchesInOppositionBox","penaltyBoxTouches","touchesInPenaltyArea","touchesInPenaltyBox","touchesInsideOppositionBox"):
+        direct_box=_number(p["stats"].get(key))
+        if direct_box is not None:break
+    box_x_min=(105.0-16.5)/105.0*100.0;box_y_min=((68.0-40.32)/2.0)/68.0*100.0
+    return {"player":{"id":p["id"],"name":p["name"],"team":p["team"]},"official_touches":official_touches,"direct_opposition_box_touches":direct_box,"heatmap_points":len(points),"derived_opposition_box_touches":len(box_points),"penalty_area_bounds":{"x_min":box_x_min,"x_max":100.0,"y_min":box_y_min,"y_max":100.0-box_y_min},"derived_box_points":box_points}
 def _period_rows(payload: dict[str, Any], period: str) -> list[dict[str, Any]]:
     code={"full":"ALL","first_half":"1ST","second_half":"2ND"}[period]; aliases={"ALL":{"ALL"},"1ST":{"1ST","FIRST"},"2ND":{"2ND","SECOND"}}
     block=next((b for b in payload.get("statistics",{}).get("statistics",[]) or [] if str(b.get("period","")).upper() in aliases[code]),None)
@@ -195,14 +212,13 @@ def player_stats(event_id:str,player_id:str):
 def player_heatmap_audit(event_id:str,player_id:str):
     payload=_load(event_id);p=next((p for p in _players(payload) if p["id"]==str(player_id)),None)
     if not p:raise HTTPException(404,"Player not found")
-    points=_heatmap_points(event_id,str(player_id));box_points=[point for point in points if _is_opposition_box_point(point)]
-    official_touches=_number(p["stats"].get("touches"));official_touches=_number(p["stats"].get("totalTouches")) if official_touches is None else official_touches
-    direct_box=None
-    for key in ("touchesInOppBox","touchesInOppositionBox","penaltyBoxTouches","touchesInPenaltyArea","touchesInPenaltyBox","touchesInsideOppositionBox"):
-        direct_box=_number(p["stats"].get(key))
-        if direct_box is not None:break
-    box_x_min=(105.0-16.5)/105.0*100.0;box_y_min=((68.0-40.32)/2.0)/68.0*100.0
-    return {"event_id":event_id,"player":{"id":p["id"],"name":p["name"],"team":p["team"]},"official_touches":official_touches,"direct_opposition_box_touches":direct_box,"heatmap_points":len(points),"derived_opposition_box_touches":len(box_points),"penalty_area_bounds":{"x_min":box_x_min,"x_max":100.0,"y_min":box_y_min,"y_max":100.0-box_y_min},"derived_box_points":box_points}
+    return {"event_id":event_id,**_heatmap_audit_result(event_id,p)}
+@app.get("/audit/latest-heatmaps")
+def latest_heatmap_audit():
+    files=sorted(DATA_DIR.glob("*.json"),key=lambda x:x.stat().st_mtime,reverse=True)
+    if not files:raise HTTPException(404,"No imported MatchLab match is available yet.")
+    payload=json.loads(files[0].read_text());m=_match(payload);targets={"Noah Okafor","Dominic Calvert-Lewin"};players=[p for p in _players(payload) if p["name"] in targets]
+    return {"event_id":m["event_id"],"match":f"{m['home_name']} {m['home_score']}–{m['away_score']} {m['away_name']}","date":m["date_text"],"results":[_heatmap_audit_result(m["event_id"],p) for p in players],"missing_players":sorted(targets-{p["name"] for p in players})}
 @app.get("/matches/{event_id}/canonical-leaders/{metric_key_value}")
 def leaders(event_id:str,metric_key_value:str,period:str=Query("full"),scope:str=Query("all"),limit:int=Query(20,ge=1,le=50)):
     if period!="full":raise HTTPException(400,"Metric Leader period data is only available for the full match from this SofaScore feed.")
