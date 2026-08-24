@@ -3,6 +3,7 @@ let draggedPlayerLabel = '';
 let scheduled = false;
 
 const text = (el: Element | null) => (el?.textContent || '').trim();
+const same = (a: string[], b: string[]) => a.length === b.length && a.every((value, index) => value === b[index]);
 
 function isPlayerEditor(panel: Element) {
   return Array.from(panel.querySelectorAll('.stat-editor-row')).some(row => text(row).includes('Minutes Played') && text(row).includes('LOCKED'));
@@ -23,6 +24,10 @@ function playerGraphicRows(): HTMLElement[] {
   return list ? Array.from(list.querySelectorAll<HTMLElement>(':scope > .player-stat-row')) : [];
 }
 
+function graphicLabel(row: Element): string {
+  return text(row.querySelector('.player-stat-label'));
+}
+
 function numericValue(row: Element): number {
   const raw = text(row.querySelector('.player-stat-value')).replace(/,/g, '');
   const match = raw.match(/-?\d+(?:\.\d+)?/);
@@ -33,28 +38,31 @@ function rankOrderActive(): boolean {
   return Array.from(document.querySelectorAll<HTMLButtonElement>('.clear-stats')).some(btn => text(btn) === 'Rank Order' && btn.classList.contains('clear-stats--active'));
 }
 
-function applyZeroLastToRankOrder() {
-  if (!rankOrderActive()) return;
+function reorderGraphic(desiredLabels: string[]) {
   const rows = playerGraphicRows();
   if (!rows.length) return;
   const list = rows[0].parentElement;
   if (!list) return;
-  const minutes = rows.filter(row => text(row.querySelector('.player-stat-label')) === 'Minutes Played');
-  const stats = rows.filter(row => text(row.querySelector('.player-stat-label')) !== 'Minutes Played');
+  const current = rows.map(graphicLabel);
+  const desired = desiredLabels.filter(label => current.includes(label));
+  current.forEach(label => { if (!desired.includes(label)) desired.push(label); });
+  if (same(current, desired)) return;
+  const byLabel = new Map(rows.map(row => [graphicLabel(row), row]));
+  desired.forEach(label => {
+    const row = byLabel.get(label);
+    if (row) list.appendChild(row);
+  });
+}
+
+function applyZeroLastToRankOrder() {
+  if (!rankOrderActive()) return;
+  const rows = playerGraphicRows();
+  if (!rows.length) return;
+  const minutes = rows.filter(row => graphicLabel(row) === 'Minutes Played');
+  const stats = rows.filter(row => graphicLabel(row) !== 'Minutes Played');
   const nonZero = stats.filter(row => numericValue(row) !== 0);
   const zero = stats.filter(row => numericValue(row) === 0);
-  [...minutes, ...nonZero, ...zero].forEach(row => list.appendChild(row));
-
-  const editor = playerEditorPanel();
-  if (!editor) return;
-  const editorList = editor.querySelector('.stat-editor-list');
-  if (!editorList) return;
-  const byLabel = new Map(Array.from(editorList.querySelectorAll<HTMLElement>('.stat-editor-row:not(.stat-editor-row--locked)')).map(row => [statLabel(row), row]));
-  [...nonZero, ...zero].forEach(graphicRow => {
-    const label = text(graphicRow.querySelector('.player-stat-label'));
-    const editorRow = byLabel.get(label);
-    if (editorRow) editorList.appendChild(editorRow);
-  });
+  reorderGraphic([...minutes, ...nonZero, ...zero].map(graphicLabel));
 }
 
 function applyManualOrder() {
@@ -62,23 +70,19 @@ function applyManualOrder() {
   const editor = playerEditorPanel();
   const editorList = editor?.querySelector('.stat-editor-list');
   if (editorList) {
-    const byLabel = new Map(Array.from(editorList.querySelectorAll<HTMLElement>('.stat-editor-row:not(.stat-editor-row--locked)')).map(row => [statLabel(row), row]));
-    manualPlayerOrder.forEach(label => {
-      const row = byLabel.get(label);
-      if (row) editorList.appendChild(row);
-    });
+    const rows = Array.from(editorList.querySelectorAll<HTMLElement>('.stat-editor-row:not(.stat-editor-row--locked)'));
+    const current = rows.map(statLabel);
+    const desired = manualPlayerOrder.filter(label => current.includes(label));
+    current.forEach(label => { if (!desired.includes(label)) desired.push(label); });
+    if (!same(current, desired)) {
+      const byLabel = new Map(rows.map(row => [statLabel(row), row]));
+      desired.forEach(label => {
+        const row = byLabel.get(label);
+        if (row) editorList.appendChild(row);
+      });
+    }
   }
-  const rows = playerGraphicRows();
-  if (!rows.length) return;
-  const list = rows[0].parentElement;
-  if (!list) return;
-  const minutes = rows.find(row => text(row.querySelector('.player-stat-label')) === 'Minutes Played');
-  const byLabel = new Map(rows.filter(row => row !== minutes).map(row => [text(row.querySelector('.player-stat-label')), row]));
-  if (minutes) list.appendChild(minutes);
-  manualPlayerOrder.forEach(label => {
-    const row = byLabel.get(label);
-    if (row) list.appendChild(row);
-  });
+  reorderGraphic(['Minutes Played', ...manualPlayerOrder]);
 }
 
 function installAutoSelect() {
@@ -133,19 +137,26 @@ function installPlayerDragOrder() {
 
 function addEventIcons() {
   playerGraphicRows().forEach(row => {
-    row.querySelector('.player-event-icons')?.remove();
-    const label = text(row.querySelector('.player-stat-label')).toLowerCase();
+    const label = graphicLabel(row).toLowerCase();
     const value = Math.max(0, Math.floor(numericValue(row)));
-    if (value < 1) return;
     let icon = '';
     if (label === 'goals') icon = '⚽';
     else if (label === 'assists') icon = '🅰️';
     else if (label === 'red cards') icon = '🟥';
-    if (!icon) return;
+    const expected = icon && value > 0 ? Array.from({ length: value }, () => icon).join(' ') : '';
+    const existing = row.querySelector<HTMLElement>('.player-event-icons');
+    if (!expected) {
+      existing?.remove();
+      return;
+    }
+    if (existing) {
+      if (existing.textContent !== expected) existing.textContent = expected;
+      return;
+    }
     const badge = document.createElement('span');
     badge.className = 'player-event-icons';
     badge.setAttribute('aria-label', `${value} ${label}`);
-    badge.textContent = Array.from({ length: value }, () => icon).join(' ');
+    badge.textContent = expected;
     row.appendChild(badge);
   });
 }
