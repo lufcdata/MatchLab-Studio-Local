@@ -13,10 +13,12 @@ fail_dialog(){ osascript -e "display dialog \"$1\" buttons {\"OK\"} default butt
 [ -f "$BACKEND/golden_metrics.py" ] || fail_dialog "MatchLab Golden metrics file is missing. Please Fetch/Pull the latest MatchLab Studio first."
 [ -f "$BACKEND/server.py" ] || fail_dialog "MatchLab API wrapper is missing. Please Fetch/Pull the latest MatchLab Studio first."
 
-# Wire in only the crests/player images supplied for MatchLab.
+# Asset folders are intentionally separate: team crests are preserved, player imagery is replaceable.
 TEAM_ASSET_DIR="$STUDIO_ROOT/assets/team_logos"
 PLAYER_ASSET_DIR="$STUDIO_ROOT/assets/player_images"
 mkdir -p "$TEAM_ASSET_DIR" "$PLAYER_ASSET_DIR"
+
+# Keep the existing MatchLab team-logo pack. Do not copy legacy player images from it.
 ASSET_ZIP=""
 for candidate in "$STUDIO_ROOT/MatchLab-Studio-Assets.zip" "$HOME/Downloads/MatchLab-Studio-Assets.zip" "$HOME/Desktop/MatchLab-Studio-Assets.zip" "$HOME/Documents/MatchLab-Studio-Assets.zip"; do
   if [ -f "$candidate" ]; then ASSET_ZIP="$candidate"; break; fi
@@ -26,8 +28,26 @@ if [ -n "$ASSET_ZIP" ] && [ -f "$ASSET_ZIP" ]; then
   TMP_ASSETS="$(mktemp -d /tmp/matchlab-assets.XXXXXX)"
   /usr/bin/unzip -q -o "$ASSET_ZIP" -d "$TMP_ASSETS"
   [ -d "$TMP_ASSETS/public/team-logos" ] && /bin/cp -f "$TMP_ASSETS/public/team-logos/"* "$TEAM_ASSET_DIR/" 2>/dev/null || true
-  [ -d "$TMP_ASSETS/public/player-images" ] && /bin/cp -f "$TMP_ASSETS/public/player-images/"* "$PLAYER_ASSET_DIR/" 2>/dev/null || true
   /bin/rm -rf "$TMP_ASSETS"
+fi
+
+# Leeds Players 24.08.2026 is the authoritative player-photo set.
+# Old player photos are deliberately removed before the replacement set is installed.
+/bin/rm -f "$PLAYER_ASSET_DIR/"* 2>/dev/null || true
+PLAYER_ZIP=""
+for candidate in "$STUDIO_ROOT/Leeds Players 24.08.2026.zip" "$HOME/Downloads/Leeds Players 24.08.2026.zip" "$HOME/Desktop/Leeds Players 24.08.2026.zip" "$HOME/Documents/Leeds Players 24.08.2026.zip"; do
+  if [ -f "$candidate" ]; then PLAYER_ZIP="$candidate"; break; fi
+done
+if [ -z "$PLAYER_ZIP" ] && command -v mdfind >/dev/null 2>&1; then PLAYER_ZIP="$(mdfind 'kMDItemFSName == "Leeds Players 24.08.2026.zip"c' | head -1 || true)"; fi
+if [ -n "$PLAYER_ZIP" ] && [ -f "$PLAYER_ZIP" ]; then
+  TMP_PLAYERS="$(mktemp -d /tmp/matchlab-players.XXXXXX)"
+  /usr/bin/unzip -q -o "$PLAYER_ZIP" -d "$TMP_PLAYERS"
+  find "$TMP_PLAYERS" -type f -iname '*.png' ! -path '*/__MACOSX/*' | while IFS= read -r file; do
+    base="$(basename "$file" .png)"
+    slug="$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+    [ -n "$slug" ] && /bin/cp -f "$file" "$PLAYER_ASSET_DIR/$slug.png"
+  done
+  /bin/rm -rf "$TMP_PLAYERS"
 fi
 
 # Footer artwork supplied for MatchLab.
