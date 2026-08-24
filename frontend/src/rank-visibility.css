@@ -5,3 +5,10 @@
 .player-stat-row:has(.player-stat-bar > span[style*="width: 0%"] ) .leader-rank-badge {
   visibility: hidden;
 }
+
+/* Rank Order is intended to surface meaningful match contributions.
+   While it is active, remove zero-value rows entirely so they cannot
+   obscure positive-value metrics. Normal/manual order is unchanged. */
+body:has(.clear-stats--active) .player-graphic:not(.leaders-graphic) .player-stat-row:not(.player-stat-row--locked):has(.player-stat-bar > span[style*="width: 0%"] ) {
+  display: none;
+}
