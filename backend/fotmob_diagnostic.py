@@ -96,7 +96,17 @@ def _resolve_numeric_match_id(match_url: str) -> str | None:
 
 def fetch_match_details(match_id: str, match_url: str | None = None) -> dict[str, Any]:
     """Fetch FotMob page data; retry via numeric match ID for new slug URLs."""
-    url = match_url or f"https://www.fotmob.com/match/{match_id}"
+    # FotMob also emits a third URL shape such as:
+    # /matches/team-a-vs-team-b/2fh3fh#4813705
+    # Browser fragments are never sent to the server. When an explicit numeric
+    # ID is present after #, skip the slug page entirely and use the canonical
+    # numeric route. This preserves old numeric IDs and the newer slug resolver.
+    has_numeric_hash = bool(match_url and re.search(r"#\d+(?::|$)", match_url))
+    if has_numeric_hash and str(match_id).isdigit():
+        url = f"https://www.fotmob.com/match/{match_id}"
+    else:
+        url = match_url or f"https://www.fotmob.com/match/{match_id}"
+
     response = _get(url)
     response.raise_for_status()
     payload = _next_payload(response.text)
