@@ -5,6 +5,7 @@ import './index.css';
 import './assets.css';
 import './rank-visibility.css';
 import './polish.css';
+import './ui-enhancements';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
