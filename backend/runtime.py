@@ -105,4 +105,29 @@ main.import_sofascore = _preserving_import_sofascore
 # preserving importer above.
 import server
 
+
+def _fotmob_match_ref(source: str) -> str:
+    """Accept both legacy numeric FotMob IDs and current alphanumeric match slugs."""
+    source = (source or "").strip()
+    if re.fullmatch(r"[A-Za-z0-9]+", source):
+        return source
+
+    patterns = (
+        r"#([A-Za-z0-9]+)(?::|$)",
+        r"/matches/[^#?]+/([A-Za-z0-9]+)(?::|[/?#]|$)",
+        r"/match/([A-Za-z0-9]+)(?::|[/?#]|$)",
+        r"[?&](?:matchId|id)=([A-Za-z0-9]+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, source, re.I)
+        if match:
+            return match.group(1)
+
+    raise server.HTTPException(400, "Could not find a FotMob match reference in that URL.")
+
+
+# server._attach_fotmob resolves this global at request time, so replacing it
+# here upgrades the existing linked-import endpoint without touching the UI.
+server._fotmob_match_id = _fotmob_match_ref
+
 app = server.app
