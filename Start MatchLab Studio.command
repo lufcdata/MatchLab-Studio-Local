@@ -76,9 +76,30 @@ if ! "$PY" -c 'import fastapi, uvicorn, curl_cffi' >/dev/null 2>&1; then
 fi
 command -v npm >/dev/null 2>&1 || fail_dialog "Node/npm is required to run MatchLab Studio."
 
-find_free_port(){ START="$1"; END="$2"; PORT="$START"; while [ "$PORT" -le "$END" ]; do if [ -z "$(lsof -ti tcp:$PORT 2>/dev/null || true)" ]; then echo "$PORT"; return 0; fi; PORT=$((PORT+1)); done; return 1; }
-BACKEND_PORT="$(find_free_port 8000 8099 || true)"
-FRONTEND_PORT="$(find_free_port 5173 5273 || true)"
+# Repeated launches used to leave old local Vite/Uvicorn listeners behind and
+# eventually exhaust the frontend port range. Stop only processes whose command
+# belongs to this MatchLab checkout; unrelated local development servers are left alone.
+stop_previous_matchlab(){
+  for port in {8000..8099} {5173..5273}; do
+    PIDS="$(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null || true)"
+    [ -z "$PIDS" ] && continue
+    for pid in ${(f)PIDS}; do
+      CMD="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+      if [[ "$CMD" == *"$STUDIO_ROOT"* ]]; then
+        kill "$pid" >/dev/null 2>&1 || true
+      fi
+    done
+  done
+  sleep 1
+}
+stop_previous_matchlab
+
+# Check LISTEN sockets only. Established browser connections must not make a port
+# look unavailable. Keep a wider fallback range so one unrelated dev server can
+# never prevent MatchLab from opening.
+find_free_port(){ START="$1"; END="$2"; PORT="$START"; while [ "$PORT" -le "$END" ]; do if [ -z "$(lsof -tiTCP:$PORT -sTCP:LISTEN 2>/dev/null || true)" ]; then echo "$PORT"; return 0; fi; PORT=$((PORT+1)); done; return 1; }
+BACKEND_PORT="$(find_free_port 8000 8199 || true)"
+FRONTEND_PORT="$(find_free_port 5173 5399 || true)"
 [ -n "$BACKEND_PORT" ] || fail_dialog "MatchLab could not find a free local backend port."
 [ -n "$FRONTEND_PORT" ] || fail_dialog "MatchLab could not find a free local frontend port."
 
@@ -86,6 +107,7 @@ cd "$BACKEND"
 : > /tmp/matchlab-backend.log
 nohup "$PY" -m uvicorn runtime:app --host 127.0.0.1 --port "$BACKEND_PORT" > /tmp/matchlab-backend.log 2>&1 &
 BACKEND_PID=$!
+printf '%s\n' "$BACKEND_PID" > /tmp/matchlab-backend.pid
 sleep 1
 if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then LAST_LINE="$(tail -1 /tmp/matchlab-backend.log 2>/dev/null | tr '"' "'" | cut -c1-220)"; [ -n "$LAST_LINE" ] || LAST_LINE="The backend process exited before reporting an error."; fail_dialog "The MatchLab local backend could not start. Last backend message: $LAST_LINE"; fi
 
@@ -94,6 +116,7 @@ if [ ! -d node_modules ]; then npm install >/tmp/matchlab-npm.log 2>&1 || fail_d
 : > /tmp/matchlab-frontend.log
 MATCHLAB_BACKEND_URL="http://127.0.0.1:$BACKEND_PORT" VITE_MATCHLAB_API="/api" nohup npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT" --strictPort > /tmp/matchlab-frontend.log 2>&1 &
 FRONTEND_PID=$!
+printf '%s\n' "$FRONTEND_PID" > /tmp/matchlab-frontend.pid
 
 for i in {1..60}; do
   if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then LAST_LINE="$(tail -1 /tmp/matchlab-backend.log 2>/dev/null | tr '"' "'" | cut -c1-220)"; fail_dialog "The MatchLab local backend stopped while starting. Last backend message: $LAST_LINE"; fi
