@@ -15,9 +15,8 @@ from golden_metrics import REQUIRED_PLAYER_LABELS
 from fotmob_diagnostic import diagnostic
 
 
-# Canonicalise the FotMob supplement metrics before any API catalog or player
-# endpoint reads METRICS. Keep Successful Final Third Passes separate: this field
-# is the successful subset, while Passes Into Final Third is the FotMob total.
+# FotMob supplement metrics are canonical MatchLab metrics. Keep Successful Final
+# Third Passes separate: Passes Into Final Third is the FotMob total field.
 for _existing in METRICS:
     if _existing.get("label") == "Final Third Passes":
         _existing["label"] = "Passes Into Final Third"
@@ -38,8 +37,7 @@ for _metric in (
         existing["match_keys"] = list(_metric["match_keys"])
         existing["player_keys"] = list(_metric["player_keys"])
 
-# Possession is a percentage on the Match page. Mark it explicitly so the
-# frontend always formats both home and away values with a trailing % sign.
+# Possession is always a percentage in MatchLab.
 for _existing in METRICS:
     if _existing.get("label") == "Possession":
         _existing["suffix"] = "%"
@@ -94,39 +92,44 @@ PROMOTED_FOTMOB_FIELDS = {
     "Line-Breaking Passes": "lineBreakingPasses",
     "Headed Clearances": "headedClearances",
 }
-
-# These are first-class Studio metrics whenever a linked FotMob match is used.
-# Keeping them in REQUIRED_PLAYER_LABELS preserves legitimate zero rows instead
-# of hiding them from Player/Leaders selectors and downstream team aggregation.
 REQUIRED_PLAYER_LABELS.update(PROMOTED_FOTMOB_FIELDS.keys())
 
 
 def _promote_validated_fotmob_fields(payload: dict, fotmob_players: list) -> Dict[str, int]:
-    """Inject the four FotMob supplement fields into canonical player rows.
-
-    FotMob commonly omits a stat key when its value is zero. Once a player has a
-    FotMob stat row in this match, an omitted target field is therefore promoted
-    as zero rather than disappearing from MatchLab. This normalization is only
-    applied when a FotMob match has explicitly been linked.
-    """
+    """Inject FotMob values into the exact SofaScore lineup rows consumed by all APIs."""
     by_name = {}
     for player in fotmob_players or []:
         stats = player.get("stats") or {}
         if not stats:
             continue
-        values = {label: stats.get(label, 0) for label in PROMOTED_FOTMOB_FIELDS}
-        by_name[_norm_name(player.get("name"))] = values
+        by_name[_norm_name(player.get("name"))] = {
+            label: stats.get(label, 0) for label in PROMOTED_FOTMOB_FIELDS
+        }
     promoted = {label: 0 for label in PROMOTED_FOTMOB_FIELDS}
-    lineups = payload.get("lineups", {}) or {}
     for side in ("home", "away"):
-        for row in ((lineups.get(side, {}) or {}).get("players", []) or []):
-            player = row.get("player", {}) or {}; values = by_name.get(_norm_name(player.get("name")))
-            if values is None: continue
+        for row in (((payload.get("lineups") or {}).get(side) or {}).get("players") or []):
+            player = row.get("player", {}) or {}
+            values = by_name.get(_norm_name(player.get("name")))
+            if values is None:
+                continue
             stats = row.setdefault("statistics", {})
             for label, value in values.items():
                 stats[PROMOTED_FOTMOB_FIELDS[label]] = value
                 promoted[label] += 1
     return promoted
+
+
+def _promote_stored_fotmob(payload: dict) -> Dict[str, int]:
+    """Self-heal older local match JSONs that already contain a FotMob supplement."""
+    fotmob = payload.get("fotmob") or {}
+    players = fotmob.get("players") or []
+    if not players:
+        return {}
+    counts = _promote_validated_fotmob_fields(payload, players)
+    fotmob["validated_fields"] = list(PROMOTED_FOTMOB_FIELDS.keys())
+    fotmob["promoted_player_counts"] = counts
+    payload["fotmob"] = fotmob
+    return counts
 
 
 def _attach_fotmob(payload: dict, fotmob_source: str) -> Dict[str, int]:
@@ -143,23 +146,31 @@ def _attach_fotmob(payload: dict, fotmob_source: str) -> Dict[str, int]:
     return promoted_counts
 
 
+def _persist_payload(event_id: str, payload: dict) -> None:
+    (DATA_DIR / f"{event_id}.json").write_text(json.dumps(payload, ensure_ascii=False))
+
+
+def _heal_event(event_id: str) -> dict:
+    path = DATA_DIR / f"{event_id}.json"
+    if not path.exists():
+        raise HTTPException(404, "Match has not been imported into MatchLab yet.")
+    payload = json.loads(path.read_text())
+    counts = _promote_stored_fotmob(payload)
+    if counts:
+        _persist_payload(event_id, payload)
+    return payload
+
+
 @app.post("/matches/import-linked")
 def import_linked(req: LinkedImportRequest):
-    """Import SofaScore plus optional FotMob supplement into one local match.
-
-    A SofaScore refresh must never silently destroy an already-linked FotMob
-    supplement. If no FotMob URL is supplied this time, reuse the stored source
-    and re-promote its four fields into the freshly downloaded SofaScore lineup.
-    """
+    """Import SofaScore and keep/reapply the linked FotMob supplement."""
     requested_event_id = _sofascore_event_id(req.sofascore_source)
     previous_fotmob = None
     if requested_event_id:
         previous_path = DATA_DIR / f"{requested_event_id}.json"
         if previous_path.exists():
-            try:
-                previous_fotmob = (json.loads(previous_path.read_text()).get("fotmob") or None)
-            except Exception:
-                previous_fotmob = None
+            try: previous_fotmob = (json.loads(previous_path.read_text()).get("fotmob") or None)
+            except Exception: previous_fotmob = None
 
     imported = import_sofascore(ImportRequest(source=req.sofascore_source)); event_id = str(imported["event_id"])
     path = DATA_DIR / f"{event_id}.json"; payload = json.loads(path.read_text())
@@ -170,17 +181,55 @@ def import_linked(req: LinkedImportRequest):
     promoted_counts: Dict[str, int] = {}
     if fotmob_source:
         promoted_counts = _attach_fotmob(payload, fotmob_source)
-        path.write_text(json.dumps(payload, ensure_ascii=False))
+        _persist_payload(event_id, payload)
 
     return {"ok": True, "event_id": event_id, "sources": {"sofascore": True, "fotmob": bool(payload.get("fotmob")), "fotmob_match_id": payload.get("fotmob", {}).get("match_id"), "validated_fields": payload.get("fotmob", {}).get("validated_fields", []), "promoted_player_counts": promoted_counts}}
 
 
 @app.get("/matches/{event_id}/sources")
 def match_sources(event_id: str):
-    path = DATA_DIR / f"{event_id}.json"
-    if not path.exists(): raise HTTPException(404, "Match has not been imported into MatchLab yet.")
-    payload = json.loads(path.read_text()); fotmob = payload.get("fotmob") or {}
+    payload = _heal_event(event_id); fotmob = payload.get("fotmob") or {}
     return {"event_id": event_id, "sofascore": {"linked": True, "role": "primary"}, "fotmob": {"linked": bool(fotmob), "role": "supplementary", "match_id": fotmob.get("match_id"), "source": fotmob.get("source"), "player_count": len(fotmob.get("players", []) or []), "validated_fields": fotmob.get("validated_fields", []), "promoted_player_counts": fotmob.get("promoted_player_counts", {})}}
+
+
+# Wrap the three production readers. This is deliberately backend-only: before
+# Match, Player or Leaders reads a local payload, any stored FotMob supplement is
+# re-promoted into the canonical lineup statistics used by main.py.
+_original_match_stats = app.routes
+
+
+def _install_healing_route_wrappers() -> None:
+    for route in app.routes:
+        path = getattr(route, "path", "")
+        endpoint = getattr(route, "endpoint", None)
+        if endpoint is None:
+            continue
+        if path not in {
+            "/matches/{event_id}",
+            "/matches/{event_id}/studio-match-stats",
+            "/matches/{event_id}/players/{player_id}",
+            "/matches/{event_id}/canonical-leaders/{metric_key_value}",
+        }:
+            continue
+        original = endpoint
+        if path == "/matches/{event_id}":
+            def healed_match(event_id: str, _original=original):
+                _heal_event(event_id); return _original(event_id)
+            route.endpoint = healed_match
+        elif path == "/matches/{event_id}/studio-match-stats":
+            def healed_stats(event_id: str, period: str = Query("full"), _original=original):
+                _heal_event(event_id); return _original(event_id, period)
+            route.endpoint = healed_stats
+        elif path == "/matches/{event_id}/players/{player_id}":
+            def healed_player(event_id: str, player_id: str, _original=original):
+                _heal_event(event_id); return _original(event_id, player_id)
+            route.endpoint = healed_player
+        else:
+            def healed_leaders(event_id: str, metric_key_value: str, period: str = Query("full"), scope: str = Query("all"), limit: int = Query(20, ge=1, le=50), _original=original):
+                _heal_event(event_id); return _original(event_id, metric_key_value, period, scope, limit)
+            route.endpoint = healed_leaders
+
+_install_healing_route_wrappers()
 
 
 @app.get("/audit/fotmob/{match_id}")
