@@ -11,25 +11,32 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from main import DATA_DIR, ImportRequest, METRICS, app, import_sofascore
+from golden_metrics import REQUIRED_PLAYER_LABELS
 from fotmob_diagnostic import diagnostic
 
 
 # Canonicalise the FotMob supplement metrics before any API catalog or player
 # endpoint reads METRICS. Keep Successful Final Third Passes separate: this field
-# is the total number of passes into the final third, not the successful subset.
+# is the successful subset, while Passes Into Final Third is the FotMob total.
 for _existing in METRICS:
     if _existing.get("label") == "Final Third Passes":
         _existing["label"] = "Passes Into Final Third"
         _existing["sofascore"] = "FotMob supplement"
+        _existing["match_keys"] = ["passesIntoFinalThird", "totalFinalThirdPasses"]
         _existing["player_keys"] = ["passesIntoFinalThird", "totalFinalThirdPasses"]
         break
 
 for _metric in (
-    {"label":"Line-Breaking Passes","sofascore":"FotMob supplement","match_keys":[],"player_keys":["lineBreakingPasses"]},
-    {"label":"Headed Clearances","sofascore":"FotMob supplement","match_keys":[],"player_keys":["headedClearances"]},
+    {"label":"Line-Breaking Passes","sofascore":"FotMob supplement","match_keys":["lineBreakingPasses"],"player_keys":["lineBreakingPasses"]},
+    {"label":"Headed Clearances","sofascore":"FotMob supplement","match_keys":["headedClearances"],"player_keys":["headedClearances"]},
 ):
     if not any(m.get("label") == _metric["label"] for m in METRICS):
         METRICS.append(_metric)
+    else:
+        existing = next(m for m in METRICS if m.get("label") == _metric["label"])
+        existing["sofascore"] = "FotMob supplement"
+        existing["match_keys"] = list(_metric["match_keys"])
+        existing["player_keys"] = list(_metric["player_keys"])
 
 
 class LinkedImportRequest(BaseModel):
@@ -73,20 +80,33 @@ PROMOTED_FOTMOB_FIELDS = {
     "Headed Clearances": "headedClearances",
 }
 
+# These are first-class Studio metrics whenever a linked FotMob match is used.
+# Keeping them in REQUIRED_PLAYER_LABELS preserves legitimate zero rows instead
+# of hiding them from Player/Leaders selectors and downstream team aggregation.
+REQUIRED_PLAYER_LABELS.update(PROMOTED_FOTMOB_FIELDS.keys())
+
 
 def _promote_validated_fotmob_fields(payload: dict, fotmob_players: list) -> Dict[str, int]:
-    """Inject selected FotMob fields into the canonical SofaScore lineup rows."""
+    """Inject the four FotMob supplement fields into canonical player rows.
+
+    FotMob commonly omits a stat key when its value is zero. Once a player has a
+    FotMob stat row in this match, an omitted target field is therefore promoted
+    as zero rather than disappearing from MatchLab. This normalization is only
+    applied when a FotMob match has explicitly been linked.
+    """
     by_name = {}
     for player in fotmob_players or []:
         stats = player.get("stats") or {}
-        values = {label: stats.get(label) for label in PROMOTED_FOTMOB_FIELDS if stats.get(label) is not None}
-        if values: by_name[_norm_name(player.get("name"))] = values
+        if not stats:
+            continue
+        values = {label: stats.get(label, 0) for label in PROMOTED_FOTMOB_FIELDS}
+        by_name[_norm_name(player.get("name"))] = values
     promoted = {label: 0 for label in PROMOTED_FOTMOB_FIELDS}
     lineups = payload.get("lineups", {}) or {}
     for side in ("home", "away"):
         for row in ((lineups.get(side, {}) or {}).get("players", []) or []):
             player = row.get("player", {}) or {}; values = by_name.get(_norm_name(player.get("name")))
-            if not values: continue
+            if values is None: continue
             stats = row.setdefault("statistics", {})
             for label, value in values.items():
                 stats[PROMOTED_FOTMOB_FIELDS[label]] = value
