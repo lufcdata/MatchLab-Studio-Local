@@ -1,6 +1,7 @@
 let manualPlayerOrder: string[] = [];
 let draggedPlayerLabel = '';
 let scheduled = false;
+let rankAutoHiddenLabels = new Set<string>();
 
 const text = (el: Element | null) => (el?.textContent || '').trim();
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((value, index) => value === b[index]);
@@ -51,6 +52,41 @@ function reorderGraphic(desiredLabels: string[]) {
   desired.forEach(label => {
     const row = byLabel.get(label);
     if (row) list.appendChild(row);
+  });
+}
+
+function syncRankZeroVisibility() {
+  const panel = playerEditorPanel();
+  if (!panel) return;
+  const editorRows = Array.from(panel.querySelectorAll<HTMLElement>('.stat-editor-row:not(.stat-editor-row--locked)'));
+  const byLabel = new Map(editorRows.map(row => [statLabel(row), row]));
+
+  if (!rankOrderActive()) {
+    const restore = [...rankAutoHiddenLabels];
+    rankAutoHiddenLabels.clear();
+    restore.forEach(label => {
+      const row = byLabel.get(label);
+      if (row?.classList.contains('stat-editor-row--hidden')) {
+        row.querySelector<HTMLButtonElement>('.visibility-button')?.click();
+      }
+    });
+    return;
+  }
+
+  // React caps the Player canvas at 18 rows. If zero-value rows remain selected,
+  // they can consume those slots before the DOM hide is applied and push genuine
+  // non-zero metrics (for example Goals = 1) outside the rendered set. Remove any
+  // zero rows that reach the canvas from the selected pool itself. MutationObserver
+  // reruns this as replacement rows enter, until all available >0 rows can surface.
+  const zeroLabels = playerGraphicRows()
+    .filter(row => graphicLabel(row) !== 'Minutes Played' && numericValue(row) === 0)
+    .map(graphicLabel);
+
+  zeroLabels.forEach(label => {
+    const row = byLabel.get(label);
+    if (!row || row.classList.contains('stat-editor-row--hidden')) return;
+    rankAutoHiddenLabels.add(label);
+    row.querySelector<HTMLButtonElement>('.visibility-button')?.click();
   });
 }
 
@@ -165,6 +201,7 @@ function enhance() {
   scheduled = false;
   installAutoSelect();
   installPlayerDragOrder();
+  syncRankZeroVisibility();
   if (rankOrderActive()) applyZeroLastToRankOrder();
   else applyManualOrder();
   addEventIcons();
