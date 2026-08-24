@@ -38,10 +38,25 @@ for _metric in (
         existing["match_keys"] = list(_metric["match_keys"])
         existing["player_keys"] = list(_metric["player_keys"])
 
+# Possession is a percentage on the Match page. Mark it explicitly so the
+# frontend always formats both home and away values with a trailing % sign.
+for _existing in METRICS:
+    if _existing.get("label") == "Possession":
+        _existing["suffix"] = "%"
+        break
+
 
 class LinkedImportRequest(BaseModel):
     sofascore_source: str
     fotmob_source: Optional[str] = None
+
+
+def _sofascore_event_id(source: str) -> str:
+    source = (source or "").strip()
+    if source.isdigit():
+        return source
+    match = re.search(r"(?:id:|event/)(\d+)", source, re.I) or re.search(r"[?&#]id=(\d+)", source, re.I)
+    return match.group(1) if match else ""
 
 
 def _fotmob_match_id(source: str) -> str:
@@ -114,25 +129,50 @@ def _promote_validated_fotmob_fields(payload: dict, fotmob_players: list) -> Dic
     return promoted
 
 
+def _attach_fotmob(payload: dict, fotmob_source: str) -> Dict[str, int]:
+    fotmob_id = _fotmob_match_id(fotmob_source)
+    fotmob_url = fotmob_source if fotmob_source.lower().startswith(("http://", "https://")) else None
+    supplement = _fotmob_result(fotmob_id, fotmob_url); players = supplement.get("players", [])
+    promoted_counts = _promote_validated_fotmob_fields(payload, players)
+    payload["fotmob"] = {
+        "match_id": fotmob_id, "source": fotmob_source, "players": players,
+        "team_totals": supplement.get("team_totals", {}),
+        "validated_fields": list(PROMOTED_FOTMOB_FIELDS.keys()), "provider_role": "supplementary",
+        "promoted_player_counts": promoted_counts,
+    }
+    return promoted_counts
+
+
 @app.post("/matches/import-linked")
 def import_linked(req: LinkedImportRequest):
-    """Import SofaScore plus optional FotMob supplement into one local match."""
+    """Import SofaScore plus optional FotMob supplement into one local match.
+
+    A SofaScore refresh must never silently destroy an already-linked FotMob
+    supplement. If no FotMob URL is supplied this time, reuse the stored source
+    and re-promote its four fields into the freshly downloaded SofaScore lineup.
+    """
+    requested_event_id = _sofascore_event_id(req.sofascore_source)
+    previous_fotmob = None
+    if requested_event_id:
+        previous_path = DATA_DIR / f"{requested_event_id}.json"
+        if previous_path.exists():
+            try:
+                previous_fotmob = (json.loads(previous_path.read_text()).get("fotmob") or None)
+            except Exception:
+                previous_fotmob = None
+
     imported = import_sofascore(ImportRequest(source=req.sofascore_source)); event_id = str(imported["event_id"])
     path = DATA_DIR / f"{event_id}.json"; payload = json.loads(path.read_text())
-    fotmob_source = (req.fotmob_source or "").strip(); promoted_counts: Dict[str, int] = {}
+    fotmob_source = (req.fotmob_source or "").strip()
+    if not fotmob_source and previous_fotmob:
+        fotmob_source = str(previous_fotmob.get("source") or previous_fotmob.get("match_id") or "").strip()
+
+    promoted_counts: Dict[str, int] = {}
     if fotmob_source:
-        fotmob_id = _fotmob_match_id(fotmob_source)
-        fotmob_url = fotmob_source if fotmob_source.lower().startswith(("http://", "https://")) else None
-        supplement = _fotmob_result(fotmob_id, fotmob_url); players = supplement.get("players", [])
-        promoted_counts = _promote_validated_fotmob_fields(payload, players)
-        payload["fotmob"] = {
-            "match_id": fotmob_id, "source": fotmob_source, "players": players,
-            "team_totals": supplement.get("team_totals", {}),
-            "validated_fields": list(PROMOTED_FOTMOB_FIELDS.keys()), "provider_role": "supplementary",
-            "promoted_player_counts": promoted_counts,
-        }
+        promoted_counts = _attach_fotmob(payload, fotmob_source)
         path.write_text(json.dumps(payload, ensure_ascii=False))
-    return {"ok": True, "event_id": event_id, "sources": {"sofascore": True, "fotmob": bool(fotmob_source), "fotmob_match_id": payload.get("fotmob", {}).get("match_id"), "validated_fields": payload.get("fotmob", {}).get("validated_fields", []), "promoted_player_counts": promoted_counts}}
+
+    return {"ok": True, "event_id": event_id, "sources": {"sofascore": True, "fotmob": bool(payload.get("fotmob")), "fotmob_match_id": payload.get("fotmob", {}).get("match_id"), "validated_fields": payload.get("fotmob", {}).get("validated_fields", []), "promoted_player_counts": promoted_counts}}
 
 
 @app.get("/matches/{event_id}/sources")
