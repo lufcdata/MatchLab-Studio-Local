@@ -18,20 +18,20 @@
 /* Player page polish — match the approved reference composition */
 .player-graphic:not(.leaders-graphic) .player-header { padding-top: 42px; padding-bottom: 28px; }
 .player-graphic:not(.leaders-graphic) .matchup__title { font-size: 31.2px; }
-.player-graphic:not(.leaders-graphic) .matchup__meta { font-size: 19px; }
+.player-graphic:not(.leaders-graphic) .matchup__meta { font-size: 20.5px; }
 .player-graphic:not(.leaders-graphic) .player-stats-panel { position: absolute; top: 278px; bottom: 112px; left: 0; right: 0; padding: 0 88px; display: flex; align-items: center; }
 .player-graphic:not(.leaders-graphic) .player-stats-list { width: 100%; gap: 6px; }
 .player-graphic:not(.leaders-graphic) .player-stat-row { position: relative; min-height: 42.4px; }
 .player-graphic:not(.leaders-graphic) .player-stat-label { color: #d0d3de; font-size: 18px; }
 .player-graphic:not(.leaders-graphic) .player-stat-value { font-size: 19px; }
 .player-graphic:not(.leaders-graphic) .player-stat-bar { height: 4.5px; }
-.player-graphic .leader-rank-badge { font-size: 11.5px; }
+.player-graphic .leader-rank-badge { font-size: 13px; }
 .player-event-icons { position: absolute; left: 44.5%; top: 50%; transform: translate(-50%,-50%); z-index: 2; white-space: nowrap; font-size: 15px; line-height: 1; letter-spacing: 2px; pointer-events: none; }
 
 /* Leaders page — reproduce the supplied reference layout */
 .leaders-header { padding-top: 42px; padding-bottom: 28px; }
 .leaders-graphic .matchup__title { font-size: 31.2px; }
-.leaders-graphic .matchup__meta { font-size: 19px; }
+.leaders-graphic .matchup__meta { font-size: 20.5px; }
 .leaders-team-pair { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 16px; }
 .leaders-team-badge { width: 72px; height: 72px; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; }
 .leaders-team-badge img { width: 72px; height: 72px; object-fit: contain; }
@@ -42,4 +42,4 @@
 .leaders-graphic .leader-stat-row .player-stat-label small { display: none; }
 .leaders-graphic .player-stat-value { font-size: 19px; }
 .leaders-graphic .player-stat-bar { height: 4.5px; }
-.leaders-graphic .leader-rank-badge { font-size: 11.5px; }
+.leaders-graphic .leader-rank-badge { font-size: 13px; }
