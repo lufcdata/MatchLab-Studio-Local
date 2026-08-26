@@ -21,7 +21,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 TEAM_ASSET_ROOTS = (ROOT / "assets" / "team_logos", ROOT / "assets" / "club_logos")
 PLAYER_ASSET_ROOTS = (ROOT / "assets" / "player_images", ROOT / "assets" / "players")
 
-app = FastAPI(title="MatchLab API", version="4.0.2-self-contained")
+app = FastAPI(title="MatchLab API", version="4.0.3-native-new-metrics")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 class ImportRequest(BaseModel):
@@ -42,9 +42,6 @@ def _fraction_numerator(value: Any) -> float | None:
     return _number(m.group(1)) if m else None
 def _match_stat_value(metric: dict[str, Any], row: dict[str, Any] | None, side: str) -> float | None:
     if not row: return None
-    # SofaScore ratio rows often expose a percentage as homeValue/awayValue while
-    # MatchLab's labels intentionally mean the successful/won COUNT. Use the
-    # numerator from strings such as "7/12 (58%)" for those count metrics.
     ratio_count_labels={"Accurate Long Passes","Accurate Crosses","Ground Duels Won","Aerial Duels Won","Duels Won","Successful Take-Ons","Tackles Won"}
     if metric["label"] in ratio_count_labels:
         numerator=_fraction_numerator(row.get(side))
@@ -60,22 +57,48 @@ def _event_id(source: str) -> str:
 def _get_json(path: str) -> dict[str, Any]:
     url = f"https://www.sofascore.com/api/v1/{path.lstrip('/')}"
     try:
-        r = requests.get(url, impersonate="chrome", timeout=20, headers={
-            "Accept":"application/json, text/plain, */*",
-            "Origin":"https://www.sofascore.com",
-            "Referer":"https://www.sofascore.com/",
-            "X-Requested-With":"XMLHttpRequest",
-            "Sec-Fetch-Site":"same-origin",
-            "Sec-Fetch-Mode":"cors",
-            "Sec-Fetch-Dest":"empty",
-        })
+        r = requests.get(url, impersonate="chrome", timeout=20, headers={"Accept":"application/json, text/plain, */*","Origin":"https://www.sofascore.com","Referer":"https://www.sofascore.com/","X-Requested-With":"XMLHttpRequest","Sec-Fetch-Site":"same-origin","Sec-Fetch-Mode":"cors","Sec-Fetch-Dest":"empty"})
         if r.status_code != 200: raise RuntimeError(f"SofaScore returned HTTP {r.status_code}")
         return r.json()
     except Exception as exc: raise HTTPException(502, f"SofaScore import failed: {exc}") from exc
+
+def _has_native_half_passes(payload: dict[str, Any]) -> bool:
+    for side in ("home","away"):
+        for row in (((payload.get("lineups") or {}).get(side) or {}).get("players") or []):
+            stats=row.get("statistics") or {}
+            if any(key in stats for key in ("accurateOppositionHalfPasses","totalOppositionHalfPasses","accurateOwnHalfPasses","totalOwnHalfPasses")): return True
+    return False
+
+def _promote_stored_supplement(payload: dict[str, Any]) -> bool:
+    """Promote only the validated supplementary clearance field into lineup stats."""
+    fotmob=payload.get("fotmob") or {}; supplement_players=fotmob.get("players") or []
+    if not supplement_players: return False
+    def norm(value: Any) -> str:
+        text=unicodedata.normalize("NFKD",str(value or "")); text="".join(ch for ch in text if not unicodedata.combining(ch)); return " ".join(re.sub(r"[^a-z0-9]+"," ",text.casefold()).split())
+    by_name={norm(p.get("name")):(p.get("stats") or {}) for p in supplement_players}; changed=False
+    for side in ("home","away"):
+        for row in (((payload.get("lineups") or {}).get(side) or {}).get("players") or []):
+            source=by_name.get(norm((row.get("player") or {}).get("name")))
+            if source is None: continue
+            value=source.get("Clearances Off Line",source.get("clearancesOffLine",0)); stats=row.setdefault("statistics",{})
+            if stats.get("clearancesOffLine") != value: stats["clearancesOffLine"]=value; changed=True
+    return changed
+
 def _load(event_id: str) -> dict[str, Any]:
     p = DATA_DIR / f"{event_id}.json"
     if not p.exists(): raise HTTPException(404, "Match has not been imported into MatchLab yet.")
-    return json.loads(p.read_text())
+    payload=json.loads(p.read_text()); changed=False
+    # Old stored matches can pre-date SofaScore's native half-pass fields. Refresh
+    # the lineup payload once in the real production loader, not via runtime.py.
+    if not _has_native_half_passes(payload):
+        try:
+            fresh=_get_json(f"event/{event_id}/lineups")
+            if isinstance(fresh,dict) and _has_native_half_passes({"lineups":fresh}): payload["lineups"]=fresh; changed=True
+        except HTTPException: pass
+    if _promote_stored_supplement(payload): changed=True
+    if changed: p.write_text(json.dumps(payload,ensure_ascii=False))
+    return payload
+
 def _match(payload: dict[str, Any]) -> dict[str, Any]:
     e = payload["basic"].get("event", payload["basic"]); hs = e.get("homeScore", {}) or {}; aws = e.get("awayScore", {}) or {}; timestamp = e.get("startTimestamp")
     return {"event_id":str(e.get("id","")),"home_name":(e.get("homeTeam",{}) or {}).get("name","Home"),"away_name":(e.get("awayTeam",{}) or {}).get("name","Away"),"home_score":str(hs.get("display",hs.get("current",""))),"away_score":str(aws.get("display",aws.get("current",""))),"tournament":(((e.get("tournament",{}) or {}).get("uniqueTournament",{}) or {}).get("name") or (e.get("tournament",{}) or {}).get("name","")),"date_text":datetime.fromtimestamp(timestamp).strftime("%d %B %Y") if timestamp else ""}
@@ -92,91 +115,69 @@ def _players(payload: dict[str, Any]) -> list[dict[str, Any]]:
             if p.get("name"): out.append({"id":str(p.get("id",p.get("slug",p["name"]))),"name":p["name"],"team":team,"opponent":opp,"side":side,"stats":stats})
     return out
 def _heatmap_points(event_id: str, player_id: str) -> list[dict[str, float]]:
-    data=_get_json(f"event/{event_id}/player/{player_id}/heatmap")
-    raw=data.get("heatmap",[]) if isinstance(data,dict) else []
-    points=[]
+    data=_get_json(f"event/{event_id}/player/{player_id}/heatmap"); raw=data.get("heatmap",[]) if isinstance(data,dict) else []; points=[]
     for point in raw or []:
         if not isinstance(point,dict): continue
         x=_number(point.get("x")); y=_number(point.get("y"))
-        if x is None or y is None: continue
-        points.append({"x":x,"y":y})
+        if x is not None and y is not None: points.append({"x":x,"y":y})
     return points
 def _is_opposition_box_point(point: dict[str, float]) -> bool:
-    # Standard 105 x 68 m pitch, expressed on SofaScore's normalized 0-100
-    # player heatmap plane. Player heatmaps are attack-normalized toward x=100.
-    box_x_min=(105.0-16.5)/105.0*100.0
-    box_y_min=((68.0-40.32)/2.0)/68.0*100.0
-    box_y_max=100.0-box_y_min
-    return point["x"]>=box_x_min and box_y_min<=point["y"]<=box_y_max
+    box_x_min=(105.0-16.5)/105.0*100.0; box_y_min=((68.0-40.32)/2.0)/68.0*100.0; return point["x"]>=box_x_min and box_y_min<=point["y"]<=100.0-box_y_min
 def _heatmap_audit_result(event_id:str,p:dict[str,Any])->dict[str,Any]:
-    points=_heatmap_points(event_id,str(p["id"]));box_points=[point for point in points if _is_opposition_box_point(point)]
-    official_touches=_number(p["stats"].get("touches"));official_touches=_number(p["stats"].get("totalTouches")) if official_touches is None else official_touches
-    direct_box=None
+    points=_heatmap_points(event_id,str(p["id"]));box_points=[point for point in points if _is_opposition_box_point(point)];official_touches=_number(p["stats"].get("touches"));official_touches=_number(p["stats"].get("totalTouches")) if official_touches is None else official_touches;direct_box=None
     for key in ("touchesInOppBox","touchesInOppositionBox","penaltyBoxTouches","touchesInPenaltyArea","touchesInPenaltyBox","touchesInsideOppositionBox"):
         direct_box=_number(p["stats"].get(key))
         if direct_box is not None:break
     box_x_min=(105.0-16.5)/105.0*100.0;box_y_min=((68.0-40.32)/2.0)/68.0*100.0
     return {"player":{"id":p["id"],"name":p["name"],"team":p["team"]},"official_touches":official_touches,"direct_opposition_box_touches":direct_box,"heatmap_points":len(points),"derived_opposition_box_touches":len(box_points),"penalty_area_bounds":{"x_min":box_x_min,"x_max":100.0,"y_min":box_y_min,"y_max":100.0-box_y_min},"derived_box_points":box_points}
 def _period_rows(payload: dict[str, Any], period: str) -> list[dict[str, Any]]:
-    code={"full":"ALL","first_half":"1ST","second_half":"2ND"}[period]; aliases={"ALL":{"ALL"},"1ST":{"1ST","FIRST"},"2ND":{"2ND","SECOND"}}
-    block=next((b for b in payload.get("statistics",{}).get("statistics",[]) or [] if str(b.get("period","")).upper() in aliases[code]),None)
-    if not block: return []
-    rows=[]; seen=set()
+    code={"full":"ALL","first_half":"1ST","second_half":"2ND"}[period]; aliases={"ALL":{"ALL"},"1ST":{"1ST","FIRST"},"2ND":{"2ND","SECOND"}}; block=next((b for b in payload.get("statistics",{}).get("statistics",[]) or [] if str(b.get("period","")).upper() in aliases[code]),None)
+    if not block:return []
+    rows=[];seen=set()
     for group in block.get("groups",[]) or []:
         for item in group.get("statisticsItems",[]) or []:
             label=canonical_match_label(str(item.get("name",item.get("key",""))),str(item.get("key","")))
-            if not label or label in seen: continue
-            seen.add(label); rows.append({"name":label,"home":item.get("home"),"away":item.get("away"),"home_value":item.get("homeValue"),"away_value":item.get("awayValue")})
+            if label and label not in seen:seen.add(label);rows.append({"name":label,"home":item.get("home"),"away":item.get("away"),"home_value":item.get("homeValue"),"away_value":item.get("awayValue")})
     return rows
-def _metric_by_label(label: str) -> dict[str, Any] | None: return next((m for m in METRICS if m["label"]==label),None)
+def _metric_by_label(label: str) -> dict[str, Any] | None:return next((m for m in METRICS if m["label"]==label),None)
 def _sum_player_metric(payload: dict[str, Any], metric: dict[str, Any], side: str) -> float | None:
-    values=[]
-    for p in _players(payload):
-        if p["side"]!=side: continue
-        value=player_metric_value(p["stats"],metric)
-        if value is not None: values.append(float(value))
-    return sum(values) if values else None
+    values=[float(v) for p in _players(payload) if p["side"]==side and (v:=player_metric_value(p["stats"],metric)) is not None];return sum(values) if values else None
 def _pass_accuracy_from_players(payload: dict[str, Any], side: str) -> float | None:
-    successful=_metric_by_label("Successful Passes"); total=_metric_by_label("Total Passes")
-    if not successful or not total: return None
-    good=_sum_player_metric(payload,successful,side); attempts=_sum_player_metric(payload,total,side)
-    return good/attempts*100.0 if good is not None and attempts else None
+    successful=_metric_by_label("Successful Passes");total=_metric_by_label("Total Passes");good=_sum_player_metric(payload,successful,side) if successful else None;attempts=_sum_player_metric(payload,total,side) if total else None;return good/attempts*100.0 if good is not None and attempts else None
 def _full_match_player_fallback(payload: dict[str, Any], metric: dict[str, Any], side: str) -> float | None:
-    if metric["label"]=="Pass Accuracy": return _pass_accuracy_from_players(payload,side)
-    if metric["label"] in {"Possession","Corners"} or not metric.get("player_keys"): return None
+    if metric["label"]=="Pass Accuracy":return _pass_accuracy_from_players(payload,side)
+    if metric["label"] in {"Possession","Corners"} or not metric.get("player_keys"):return None
     return _sum_player_metric(payload,metric,side)
 def _possession_lost_from_players(payload: dict[str, Any], side: str) -> float | None:
     values=[]
     for p in _players(payload):
-        if p["side"]!=side: continue
-        value=_number(p["stats"].get("possessionLostCtrl")); value=_number(p["stats"].get("possessionLost")) if value is None else value
-        if value is not None: values.append(value)
+        if p["side"]!=side:continue
+        value=_number(p["stats"].get("possessionLostCtrl"));value=_number(p["stats"].get("possessionLost")) if value is None else value
+        if value is not None:values.append(value)
     return sum(values) if values else None
 def _derive_period_stats(home: dict[str, Any], away: dict[str, Any]) -> None:
-    """Only exact identities derived from statistics in the same period."""
     for values in (home,away):
-        if values.get("pass_accuracy") is None and values.get("successful_passes") is not None and values.get("total_passes"):
-            values["pass_accuracy"]=values["successful_passes"]/values["total_passes"]*100.0
-    if home.get("fouled") is None and away.get("fouls") is not None: home["fouled"]=away["fouls"]
-    if away.get("fouled") is None and home.get("fouls") is not None: away["fouled"]=home["fouls"]
+        if values.get("pass_accuracy") is None and values.get("successful_passes") is not None and values.get("total_passes"):values["pass_accuracy"]=values["successful_passes"]/values["total_passes"]*100.0
+    if home.get("fouled") is None and away.get("fouls") is not None:home["fouled"]=away["fouls"]
+    if away.get("fouled") is None and home.get("fouls") is not None:away["fouled"]=home["fouls"]
 def _ordinal(rank:int)->str:
-    suffix="th" if 10<=rank%100<=20 else {1:"st",2:"nd",3:"rd"}.get(rank%10,"th"); return f"{rank}{suffix}"
+    suffix="th" if 10<=rank%100<=20 else {1:"st",2:"nd",3:"rd"}.get(rank%10,"th");return f"{rank}{suffix}"
 def _rank_label(rank:int,joint:bool)->str:
     if rank==1:return f"⭐ {'J-' if joint else ''}1st"
     return f"{'J-' if joint else ''}{_ordinal(rank)}"
 def _asset_stem(path:Path)->str:return re.sub(r"-(icon|icon-v2|icon-2|png|logo|crest|badge|player)$","",_slug(path.stem))
 def _find_asset(wanted:str,roots:tuple[Path,...])->Path|None:
-    aliases={"leeds":"leeds-united","brighton":"brighton-hove-albion","tottenham":"tottenham-hotspur","west-ham":"west-ham-united","wolves":"wolverhampton-wanderers","man-city":"manchester-city","man-utd":"manchester-united","newcastle":"newcastle-united","forest":"nottingham-forest"}; wanted=aliases.get(_slug(wanted),_slug(wanted))
+    aliases={"leeds":"leeds-united","brighton":"brighton-hove-albion","tottenham":"tottenham-hotspur","west-ham":"west-ham-united","wolves":"wolverhampton-wanderers","man-city":"manchester-city","man-utd":"manchester-united","newcastle":"newcastle-united","forest":"nottingham-forest"};wanted=aliases.get(_slug(wanted),_slug(wanted))
     for root in roots:
         if not root.exists():continue
         for p in root.rglob("*"):
             if p.is_file() and p.suffix.lower() in {".png",".webp",".jpg",".jpeg"} and aliases.get(_asset_stem(p),_asset_stem(p))==wanted:return p
     return None
 @app.get("/health")
-def health():return {"ok":True,"service":"matchlab-api","runtime":"self-contained","version":"4.0.2"}
+def health():return {"ok":True,"service":"matchlab-api","runtime":"self-contained","version":"4.0.3"}
 @app.post("/matches/import-sofascore")
 def import_sofascore(req:ImportRequest):
-    eid=_event_id(req.source); payload={"event_id":eid,"basic":_get_json(f"event/{eid}"),"statistics":_get_json(f"event/{eid}/statistics"),"lineups":_get_json(f"event/{eid}/lineups")}; (DATA_DIR/f"{eid}.json").write_text(json.dumps(payload,ensure_ascii=False)); return {"ok":True,"event_id":eid}
+    eid=_event_id(req.source);payload={"event_id":eid,"basic":_get_json(f"event/{eid}"),"statistics":_get_json(f"event/{eid}/statistics"),"lineups":_get_json(f"event/{eid}/lineups")};(DATA_DIR/f"{eid}.json").write_text(json.dumps(payload,ensure_ascii=False));return {"ok":True,"event_id":eid}
 @app.get("/matches/{event_id}")
 def get_match(event_id:str):
     payload=_load(event_id);m=_match(payload);players=_players(payload);return {"match":m,"players":[{k:p[k] for k in ("id","name","team","opponent","side")} for p in players],"statistics":_period_rows(payload,"full"),"metrics":[{"key":x["key"],"label":x["label"]} for x in available_player_metrics([type("P",(),{"stats":p["stats"]}) for p in players])]}
@@ -199,10 +200,8 @@ def match_stats(event_id:str,period:str=Query("full")):
                 if home[key] is None:home[key]=_full_match_player_fallback(payload,metric,"home")
                 if away[key] is None:away[key]=_full_match_player_fallback(payload,metric,"away")
     if period=="full":home["goals"]=_number(m["home_score"]);away["goals"]=_number(m["away_score"])
-    else:
-        home["goals"]=_period_goals(payload,period,"home");away["goals"]=_period_goals(payload,period,"away")
-    _derive_period_stats(home,away)
-    return {"event_id":event_id,"canonical_match_id":event_id,"period":period,"match":{"match_id":event_id,"date":m["date_text"],"home_team_id":_slug(m["home_name"]),"home_team":m["home_name"],"away_team_id":_slug(m["away_name"]),"away_team":m["away_name"],"home_score":m["home_score"],"away_score":m["away_score"]},"home":home,"away":away,"availability":{"missing_fields":[k for k in home if home[k] is None or away[k] is None]}}
+    else:home["goals"]=_period_goals(payload,period,"home");away["goals"]=_period_goals(payload,period,"away")
+    _derive_period_stats(home,away);return {"event_id":event_id,"canonical_match_id":event_id,"period":period,"match":{"match_id":event_id,"date":m["date_text"],"home_team_id":_slug(m["home_name"]),"home_team":m["home_name"],"away_team_id":_slug(m["away_name"]),"away_team":m["away_name"],"home_score":m["home_score"],"away_score":m["away_score"]},"home":home,"away":away,"availability":{"missing_fields":[k for k in home if home[k] is None or away[k] is None]}}
 @app.get("/matches/{event_id}/players/{player_id}")
 def player_stats(event_id:str,player_id:str):
     p=next((p for p in _players(_load(event_id)) if p["id"]==str(player_id)),None)
