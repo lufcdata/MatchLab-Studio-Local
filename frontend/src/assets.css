@@ -29,7 +29,7 @@
   display: block;
 }
 
-/* Player portrait: 30% larger than the current portrait treatment, with all placeholder chrome removed. */
+/* Player portrait: enlarged while retaining the signed-off transparent treatment. */
 .player-badge--photo {
   width: 108px;
   height: 108px;
@@ -45,8 +45,8 @@
   justify-content: center;
 }
 .player-badge--photo img {
-  width: 134.55%;
-  height: 134.55%;
+  width: 150.7%;
+  height: 150.7%;
   object-fit: contain;
   object-position: center;
   display: block;
@@ -70,9 +70,9 @@
   display: block;
 }
 
-/* Minutes Played stays visible and locked at the head of Player Stats. */
+/* Minutes Played stays visible and locked at the head of Player Stats, but uses the same neutral row outline as the other stats. */
 .player-stat-row--locked {
-  border-color: rgba(72,240,202,.18);
+  border-color: rgba(255,255,255,.06);
 }
 .stat-editor-row--locked {
   cursor: default;
