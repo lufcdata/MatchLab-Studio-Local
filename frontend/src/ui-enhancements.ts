@@ -144,22 +144,34 @@ function renderMetaParts(meta: HTMLElement, parts: string[]) {
     meta.append(part);
   });
 }
+function ordinalDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  const day = parsed.getDate();
+  const suffix = day % 100 >= 11 && day % 100 <= 13 ? 'th' : ({1:'st',2:'nd',3:'rd'} as Record<number,string>)[day % 10] || 'th';
+  const month = parsed.toLocaleString('en-GB', { month: 'short' });
+  return `${month} ${day}${suffix} ${parsed.getFullYear()}`;
+}
 async function addMatchDate() {
   const meta = document.querySelector<HTMLElement>('.player-graphic .player-meta');
   if (!meta || meta.dataset.matchDateAdded === '1') return;
   const eventId = currentEventId(); if (!eventId) return;
-  let date = matchDateCache.get(eventId) || '';
-  if (!date) {
+  let rawDate = matchDateCache.get(eventId) || '';
+  if (!rawDate) {
     try {
       const response = await fetch(`${apiOrigin()}/matches/${eventId}`); if (!response.ok) return;
-      const body = await response.json(); date = String(body?.match?.date_text || '').trim(); if (date) matchDateCache.set(eventId, date);
+      const body = await response.json(); rawDate = String(body?.match?.date_text || '').trim(); if (rawDate) matchDateCache.set(eventId, rawDate);
     } catch { return; }
   }
-  if (!date || meta.dataset.matchDateAdded === '1') return;
+  if (!rawDate || meta.dataset.matchDateAdded === '1') return;
+  const date = ordinalDate(rawDate);
   const parts = text(meta).split('|').map(part => part.trim()).filter(Boolean);
   const isLeaders = Boolean(meta.closest('.leaders-graphic'));
   if (isLeaders) {
-    if (!parts.includes(date)) parts.push(date);
+    const leaderIndex = parts.findIndex(part => /Top\s+20\s+Metric\s+Leaders/i.test(part));
+    if (leaderIndex >= 0) parts[leaderIndex] = date;
+    else if (parts.length >= 3) parts[parts.length - 1] = date;
+    else parts.push(date);
   } else if (parts.length >= 3) {
     parts[parts.length - 1] = date;
   } else {
