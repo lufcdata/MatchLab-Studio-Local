@@ -2,12 +2,14 @@
 
 /* Match page polish */
 .match-graphic .stats-panel { position: absolute; top: 170px; bottom: 82px; left: 0; right: 0; padding: 0 76px; display: flex; align-items: center; }
-.match-graphic .stats-list { width: 100%; gap: 6px; }
-.match-graphic .stat-row { min-height: 36px; padding-top: 6px; padding-bottom: 6px; grid-template-columns: .9fr 56px minmax(190px,1.35fr) 56px .9fr; }
+.match-graphic .stats-list { width: 100%; gap: 7px; }
+.match-graphic .stat-row { min-height: 42px; padding-top: 6px; padding-bottom: 6px; grid-template-columns: .9fr 72px minmax(260px,1.35fr) 72px .9fr; }
+.match-graphic .stat-row:nth-child(n+23) { display: none; }
 .match-graphic .stat-row__value--home,
 .match-graphic .stat-row__value--away { text-align: center; }
-.match-graphic .stat-row__label { color: #c7cad6; font-size: 14px; font-weight: 600; }
-.match-graphic .stat-row__bar { width: 90%; }
+.match-graphic .stat-row__value { font-size: 34px; line-height: 1; }
+.match-graphic .stat-row__label { color: #c7cad6; font-size: 28px; font-weight: 600; line-height: 1; }
+.match-graphic .stat-row__bar { width: 90%; height: 4.5px; }
 .match-graphic .stat-row__bar--left { justify-self: end; }
 .match-graphic .stat-row__bar--right { justify-self: start; }
 
