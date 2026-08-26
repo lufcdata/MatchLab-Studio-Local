@@ -74,6 +74,24 @@ function applyManualOrder() {
   reorderGraphic(['Minutes Played', ...manualPlayerOrder]);
 }
 
+function installMatchSelect22() {
+  const panel = Array.from(document.querySelectorAll('.stats-editor')).find(item => !isPlayerEditor(item));
+  if (!panel) return;
+  const button = Array.from(panel.querySelectorAll<HTMLButtonElement>('.clear-stats')).find(btn => /^Select\s+25$/i.test(text(btn)) || /^Select\s+22$/i.test(text(btn)));
+  if (!button) return;
+  button.textContent = 'Select 22';
+  if (button.dataset.select22Ready === '1') return;
+  button.dataset.select22Ready = '1';
+  button.addEventListener('click', event => {
+    event.preventDefault(); event.stopImmediatePropagation();
+    const rows = Array.from(panel.querySelectorAll<HTMLElement>('.stat-editor-row'));
+    rows.forEach((row, index) => {
+      const hidden = row.classList.contains('stat-editor-row--hidden'); const shouldShow = index < 22;
+      if ((shouldShow && hidden) || (!shouldShow && !hidden)) row.querySelector<HTMLButtonElement>('.visibility-button')?.click();
+    });
+  }, true);
+}
+
 function installAutoSelect() {
   const panel = playerEditorPanel(); const actions = panel?.querySelector('.stats-heading-actions');
   if (!actions || actions.querySelector('.player-auto-select')) return;
@@ -141,7 +159,7 @@ function enhance() {
   const active = rankOrderActive();
   if (active && !wasRankOrderActive) rankAutoHidePending = true;
   wasRankOrderActive = active;
-  installAutoSelect(); installPlayerDragOrder(); syncRankZeroVisibility();
+  installMatchSelect22(); installAutoSelect(); installPlayerDragOrder(); syncRankZeroVisibility();
   if (active) applyZeroLastToRankOrder(); else applyManualOrder();
   addEventIcons(); void addMatchDate();
 }
