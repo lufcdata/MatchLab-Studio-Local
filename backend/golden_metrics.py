@@ -21,6 +21,8 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Chances Created","sofascore":"Key Passes","match_aliases":["Key passes","Key Pass","Chances created"],"match_keys":["keyPasses","keyPass","chancesCreated"],"player_keys":["keyPass","keyPasses","chancesCreated"]},
     {"label":"Successful Passes","sofascore":"Accurate Passes","match_aliases":["Accurate passes"],"match_keys":["accuratePasses"],"player_keys":["accuratePass","accuratePasses"]},
     {"label":"Total Passes","sofascore":"Passes","match_aliases":["Total passes"],"match_keys":["passes","totalPasses"],"player_keys":["totalPass","totalPasses"]},
+    {"label":"Passes in Opposition Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOppositionHalfPasses"]},
+    {"label":"Passes in Own Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOwnHalfPasses"]},
     {"label":"Successful Final Third Passes","sofascore":"Passes In Final Third","match_aliases":["Passes in final third"],"match_keys":["finalThirdPhaseStatistic","accurateFinalThirdPasses","passesInFinalThird"],"player_keys":["accurateFinalThirdPasses","successfulFinalThirdPasses","passesInFinalThird"]},
     {"label":"Passes Into Final Third","sofascore":"FotMob supplement","match_aliases":["Passes into final third","Final third passes"],"match_keys":["passesIntoFinalThird","totalFinalThirdPasses"],"player_keys":["passesIntoFinalThird","totalFinalThirdPasses"]},
     {"label":"Line-Breaking Passes","sofascore":"FotMob supplement","match_keys":[],"player_keys":["lineBreakingPasses"]},
@@ -40,6 +42,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Interceptions","sofascore":"Interceptions","match_keys":["interceptionWon","interceptions"],"player_keys":["interceptionWon","interceptions"]},
     {"label":"Clearances","sofascore":"Clearances","match_keys":["totalClearance","clearances"],"player_keys":["totalClearance","clearances"]},
     {"label":"Headed Clearances","sofascore":"FotMob supplement","match_keys":[],"player_keys":["headedClearances"]},
+    {"label":"Clearances Off Line","sofascore":"FotMob supplement","match_keys":["clearancesOffLine"],"player_keys":["clearancesOffLine"],"default_zero":True},
     {"label":"Fouls","sofascore":"Fouls","match_keys":["fouls"],"player_keys":["fouls"]},
     {"label":"Fouled","sofascore":"Was Fouled","match_aliases":["Was fouled"],"match_keys":["wasFouled"],"player_keys":["wasFouled"]},
     {"label":"Possession Lost","sofascore":"Possession Lost","match_aliases":["Possession lost"],"match_keys":["possessionLost"],"player_keys":["possessionLostCtrl","possessionLost"]},
@@ -54,7 +57,7 @@ METRICS: list[dict[str, Any]] = [
 ]
 
 METRIC_BY_LABEL = {m["label"]: m for m in METRICS}
-REQUIRED_PLAYER_LABELS = {"Opposition Box Touches","Shots Outside Box","Shots Inside The Box","Big Chances Created","Big Chances Missed","Successful Final Third Passes","Pass Accuracy","Final Third Entries","Ground Duels Won","Penalties Won","High Claims","Red Cards","Defensive Actions"}
+REQUIRED_PLAYER_LABELS = {"Opposition Box Touches","Shots Outside Box","Shots Inside The Box","Big Chances Created","Big Chances Missed","Successful Final Third Passes","Passes in Opposition Half","Passes in Own Half","Pass Accuracy","Final Third Entries","Ground Duels Won","Penalties Won","High Claims","Red Cards","Clearances Off Line","Defensive Actions"}
 
 def metric_key(label: str) -> str: return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in label).split())
 def _norm(value: Any) -> str:
@@ -142,6 +145,8 @@ def _ground_duel_total(stats: dict[str, Any]) -> float | None:
 def format_player_metric(stats: dict[str, Any], metric: dict[str, Any], value: float) -> str:
     label=metric.get("label"); total: float | None=None
     if label=="Successful Passes": total=_first_number(stats,["totalPass","totalPasses"])
+    elif label=="Passes in Opposition Half": total=_first_number(stats,["totalOppositionHalfPasses"])
+    elif label=="Passes in Own Half": total=_first_number(stats,["totalOwnHalfPasses"])
     elif label=="Accurate Crosses": total=_first_number(stats,["totalCross","totalCrosses","crosses"])
     elif label=="Accurate Long Passes": total=_first_number(stats,["totalLongBalls","totalLongPasses","longBalls","longPasses"])
     elif label=="Duels Won": total=_duel_total(stats)
