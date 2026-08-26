@@ -23,8 +23,8 @@
   justify-content: center;
 }
 .team-badge__image {
-  width: 90%;
-  height: 90%;
+  width: 99%;
+  height: 99%;
   object-fit: contain;
   display: block;
 }
@@ -141,5 +141,5 @@
 
 @media (max-width: 620px) {
   .team-badge { flex-basis: 72px; height: 72px; }
-  .team-badge__image { width: 90%; height: 90%; }
+  .team-badge__image { width: 99%; height: 99%; }
 }
