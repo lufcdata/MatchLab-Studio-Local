@@ -26,7 +26,7 @@ for _metric in _NEW_METRICS:
 
 # The production endpoints in main.py all resolve main._load at request time.
 # Patch that single load boundary before server.py is imported so Match, Player
-# and Leaders all receive the same FotMob-enriched canonical payload.
+# and Leaders all receive the same canonical payload.
 _FOTMOB_FIELDS = {
     "Opposition Box Touches": "touchesInOppBox",
     "Passes Into Final Third": "passesIntoFinalThird",
@@ -81,11 +81,39 @@ def _promote(payload: dict[str, Any]) -> bool:
     return changed
 
 
+def _has_native_half_passes(payload: dict[str, Any]) -> bool:
+    """True when the stored SofaScore lineups contain the native half-pass fields."""
+    for side in ("home", "away"):
+        rows = (((payload.get("lineups") or {}).get(side) or {}).get("players") or [])
+        for row in rows:
+            stats = row.get("statistics") or {}
+            if "accurateOppositionHalfPasses" in stats or "accurateOwnHalfPasses" in stats:
+                return True
+    return False
+
+
+def _refresh_native_lineups(event_id: str, payload: dict[str, Any]) -> bool:
+    """Self-heal older local JSONs by refreshing only SofaScore's lineup payload."""
+    if _has_native_half_passes(payload):
+        return False
+    try:
+        fresh_lineups = main._get_json(f"event/{event_id}/lineups")
+    except Exception:
+        return False
+    if not isinstance(fresh_lineups, dict) or not _has_native_half_passes({"lineups": fresh_lineups}):
+        return False
+    payload["lineups"] = fresh_lineups
+    return True
+
+
 _base_load = main._load
 
 def _healed_load(event_id: str) -> dict[str, Any]:
     payload = _base_load(event_id)
+    changed = _refresh_native_lineups(event_id, payload)
     if _promote(payload):
+        changed = True
+    if changed:
         (main.DATA_DIR / f"{event_id}.json").write_text(json.dumps(payload, ensure_ascii=False))
     return payload
 
