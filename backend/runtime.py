@@ -24,9 +24,6 @@ for _metric in _NEW_METRICS:
         existing.update(dict(_metric))
     golden_metrics.REQUIRED_PLAYER_LABELS.add(_metric["label"])
 
-# The production endpoints in main.py all resolve main._load at request time.
-# Patch that single load boundary before server.py is imported so Match, Player
-# and Leaders all receive the same canonical payload.
 _FOTMOB_FIELDS = {
     "Opposition Box Touches": "touchesInOppBox",
     "Passes Into Final Third": "passesIntoFinalThird",
@@ -82,7 +79,6 @@ def _promote(payload: dict[str, Any]) -> bool:
 
 
 def _has_native_half_passes(payload: dict[str, Any]) -> bool:
-    """True when the stored SofaScore lineups contain the native half-pass fields."""
     for side in ("home", "away"):
         rows = (((payload.get("lineups") or {}).get(side) or {}).get("players") or [])
         for row in rows:
@@ -93,7 +89,6 @@ def _has_native_half_passes(payload: dict[str, Any]) -> bool:
 
 
 def _refresh_native_lineups(event_id: str, payload: dict[str, Any]) -> bool:
-    """Self-heal older local JSONs by refreshing only SofaScore's lineup payload."""
     if _has_native_half_passes(payload):
         return False
     try:
@@ -119,7 +114,6 @@ def _healed_load(event_id: str) -> dict[str, Any]:
 
 main._load = _healed_load
 
-# Preserve the linked FotMob supplement whenever SofaScore is refreshed.
 _base_import_sofascore = main.import_sofascore
 
 def _preserving_import_sofascore(req):
@@ -141,39 +135,61 @@ def _preserving_import_sofascore(req):
 
 main.import_sofascore = _preserving_import_sofascore
 
-# Preserve native SofaScore pass ratios (successful/attempted) in Player display
-# while the successful count remains the numeric value used for ranking.
+# Do not rely on catalogue discovery for these two native SofaScore fields.
+# Inject/replace their canonical Player rows explicitly so they are guaranteed
+# to reach the Player page and its toggle/ranking controls whenever SofaScore
+# supplies the values.
 _base_build_rows = main.build_canonical_player_rows
+
+def _number(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ratio_text(value: float, total: float | None) -> str:
+    left = str(int(value)) if value.is_integer() else f"{value:.1f}"
+    if total is None or total < value:
+        return left
+    right = str(int(total)) if total.is_integer() else f"{total:.1f}"
+    return f"{left}/{right}"
+
 
 def _build_rows_with_half_pass_ratios(stats: dict[str, Any], hide_zero: bool = True):
     rows, minutes = _base_build_rows(stats, hide_zero=hide_zero)
-    totals = {
-        "passes_in_opposition_half": stats.get("totalOppositionHalfPasses"),
-        "passes_in_own_half": stats.get("totalOwnHalfPasses"),
-    }
-    for row in rows:
-        total = totals.get(row.get("key"))
-        if total is None:
+    native = (
+        ("passes_in_opposition_half", "Passes in Opposition Half", "accurateOppositionHalfPasses", "totalOppositionHalfPasses"),
+        ("passes_in_own_half", "Passes in Own Half", "accurateOwnHalfPasses", "totalOwnHalfPasses"),
+    )
+    by_key = {str(row.get("key")): row for row in rows}
+    for key, label, accurate_key, total_key in native:
+        value = _number(stats.get(accurate_key))
+        total = _number(stats.get(total_key))
+        if value is None:
             continue
-        try:
-            value = float(row.get("value", 0)); total_value = float(total)
-        except (TypeError, ValueError):
-            continue
-        if total_value < value:
-            continue
-        left = str(int(value)) if value.is_integer() else f"{value:.1f}"
-        right = str(int(total_value)) if total_value.is_integer() else f"{total_value:.1f}"
-        row["display"] = f"{left}/{right}"
+        row = {
+            "key": key,
+            "label": label,
+            "display": _ratio_text(value, total),
+            "rank": value,
+            "value": value,
+        }
+        if key in by_key:
+            by_key[key].update(row)
+        else:
+            rows.append(row)
+            by_key[key] = row
     return rows, minutes
 
 main.build_canonical_player_rows = _build_rows_with_half_pass_ratios
 
-# Import server only after the canonical load/import boundaries are patched.
 import server
 
 
 def _fotmob_match_ref(source: str) -> str:
-    """Accept legacy numeric IDs, alphanumeric slugs, and numeric hash URLs."""
     source = (source or "").strip()
     if re.fullmatch(r"[A-Za-z0-9]+", source):
         return source
