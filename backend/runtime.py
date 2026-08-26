@@ -9,14 +9,19 @@ import main
 import golden_metrics
 
 # Additive-only metric extension. Existing Golden metrics are not changed.
+# The two half-pass metrics are native SofaScore lineup fields. Clearances Off
+# Line remains supplementary until a native SofaScore field is established.
 _NEW_METRICS = (
-    {"label":"Passes in Opposition Half","sofascore":"FotMob supplement","match_keys":["passesInOppositionHalf"],"player_keys":["passesInOppositionHalf"]},
-    {"label":"Passes in Own Half","sofascore":"FotMob supplement","match_keys":["passesInOwnHalf"],"player_keys":["passesInOwnHalf"]},
+    {"label":"Passes in Opposition Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOppositionHalfPasses"]},
+    {"label":"Passes in Own Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOwnHalfPasses"]},
     {"label":"Clearances Off Line","sofascore":"FotMob supplement","match_keys":["clearancesOffLine"],"player_keys":["clearancesOffLine"],"default_zero":True},
 )
 for _metric in _NEW_METRICS:
-    if not any(m.get("label") == _metric["label"] for m in main.METRICS):
+    existing = next((m for m in main.METRICS if m.get("label") == _metric["label"]), None)
+    if existing is None:
         main.METRICS.append(dict(_metric))
+    else:
+        existing.update(dict(_metric))
     golden_metrics.REQUIRED_PLAYER_LABELS.add(_metric["label"])
 
 # The production endpoints in main.py all resolve main._load at request time.
@@ -27,14 +32,9 @@ _FOTMOB_FIELDS = {
     "Passes Into Final Third": "passesIntoFinalThird",
     "Line-Breaking Passes": "lineBreakingPasses",
     "Headed Clearances": "headedClearances",
-    "Passes in Opposition Half": "passesInOppositionHalf",
-    "Passes in Own Half": "passesInOwnHalf",
     "Clearances Off Line": "clearancesOffLine",
 }
-_FOTMOB_TOTAL_FIELDS = {
-    "Passes in Opposition Half Total": "passesInOppositionHalfTotal",
-    "Passes in Own Half Total": "passesInOwnHalfTotal",
-}
+_FOTMOB_TOTAL_FIELDS: dict[str, str] = {}
 
 
 def _norm(value: Any) -> str:
@@ -113,15 +113,15 @@ def _preserving_import_sofascore(req):
 
 main.import_sofascore = _preserving_import_sofascore
 
-# Keep the FotMob pass ratios (e.g. 2/3 and 5/5) in Player display while the
-# numeric successful count remains the ranking value used by Player/Leaders.
+# Preserve native SofaScore pass ratios (successful/attempted) in Player display
+# while the successful count remains the numeric value used for ranking.
 _base_build_rows = main.build_canonical_player_rows
 
-def _build_rows_with_fotmob_ratios(stats: dict[str, Any], hide_zero: bool = True):
+def _build_rows_with_half_pass_ratios(stats: dict[str, Any], hide_zero: bool = True):
     rows, minutes = _base_build_rows(stats, hide_zero=hide_zero)
     totals = {
-        "passes_in_opposition_half": stats.get("passesInOppositionHalfTotal"),
-        "passes_in_own_half": stats.get("passesInOwnHalfTotal"),
+        "passes_in_opposition_half": stats.get("totalOppositionHalfPasses"),
+        "passes_in_own_half": stats.get("totalOwnHalfPasses"),
     }
     for row in rows:
         total = totals.get(row.get("key"))
@@ -138,7 +138,7 @@ def _build_rows_with_fotmob_ratios(stats: dict[str, Any], hide_zero: bool = True
         row["display"] = f"{left}/{right}"
     return rows, minutes
 
-main.build_canonical_player_rows = _build_rows_with_fotmob_ratios
+main.build_canonical_player_rows = _build_rows_with_half_pass_ratios
 
 # Import server only after the canonical load/import boundaries are patched.
 import server
