@@ -14,7 +14,11 @@ TARGET_KEYS = {
     "passes_into_final_third": "Passes Into Final Third",
     "headed_clearance": "Headed Clearances",
     "line_breaking_passes": "Line-Breaking Passes",
+    "accurate_passes_opposition_half": "Passes in Opposition Half",
+    "accurate_passes_own_half": "Passes in Own Half",
+    "clearance_off_line": "Clearances Off Line",
 }
+PASS_RATIO_KEYS = {"accurate_passes_opposition_half", "accurate_passes_own_half"}
 
 
 def _get(url: str):
@@ -31,11 +35,7 @@ def _get(url: str):
 
 
 def _next_payload(html: str) -> dict[str, Any]:
-    match = re.search(
-        r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
-        html,
-        re.I | re.S,
-    )
+    match = re.search(r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>', html, re.I | re.S)
     if not match:
         raise RuntimeError("FotMob page did not expose a __NEXT_DATA__ match payload")
     return json.loads(unescape(match.group(1)))
@@ -63,7 +63,6 @@ def _query_from_match_url(match_url: str) -> str:
 
 
 def _resolve_numeric_match_id(match_url: str) -> str | None:
-    """Resolve new FotMob alphanumeric page slugs through the public search API."""
     query = _query_from_match_url(match_url)
     if not query:
         return None
@@ -74,11 +73,9 @@ def _resolve_numeric_match_id(match_url: str) -> str | None:
         data = response.json()
     except Exception:
         return None
-
     options: list[dict[str, Any]] = []
     for group in data.get("matchSuggest", []) or []:
         options.extend(group.get("options", []) or [])
-
     wanted_tokens = {t for t in re.findall(r"[a-z0-9]+", query.casefold()) if len(t) > 2 and t not in {"united", "city", "football", "club"}}
     best: tuple[int, str] | None = None
     for option in options:
@@ -95,27 +92,16 @@ def _resolve_numeric_match_id(match_url: str) -> str | None:
 
 
 def fetch_match_details(match_id: str, match_url: str | None = None) -> dict[str, Any]:
-    """Fetch FotMob page data; retry via numeric match ID for new slug URLs."""
-    # FotMob also emits a third URL shape such as:
-    # /matches/team-a-vs-team-b/2fh3fh#4813705
-    # Browser fragments are never sent to the server. When an explicit numeric
-    # ID is present after #, skip the slug page entirely and use the canonical
-    # numeric route. This preserves old numeric IDs and the newer slug resolver.
     has_numeric_hash = bool(match_url and re.search(r"#\d+(?::|$)", match_url))
     if has_numeric_hash and str(match_id).isdigit():
         url = f"https://www.fotmob.com/match/{match_id}"
     else:
         url = match_url or f"https://www.fotmob.com/match/{match_id}"
-
     response = _get(url)
     response.raise_for_status()
     payload = _next_payload(response.text)
     if _has_player_stats(payload):
         return payload
-
-    # New FotMob page codes (e.g. 2vqauu) can serve a deferred shell. Resolve
-    # the underlying numeric match ID from the public search API and retry the
-    # canonical /match/<id> route, which is more likely to include playerStats.
     numeric_id = str(match_id) if str(match_id).isdigit() else None
     if not numeric_id and match_url:
         numeric_id = _resolve_numeric_match_id(match_url)
@@ -125,8 +111,6 @@ def fetch_match_details(match_id: str, match_url: str | None = None) -> dict[str
         retry_payload = _next_payload(retry.text)
         if _has_player_stats(retry_payload):
             return retry_payload
-        # Return the richer retry payload even when deferred; diagnostic metadata
-        # below will make the absence visible instead of silently inventing stats.
         return retry_payload
     return payload
 
@@ -140,24 +124,41 @@ def _stat_value(stat: Any) -> Any:
     return stat if isinstance(stat, (int, float, str)) else None
 
 
+def _stat_total(stat: Any) -> Any:
+    if not isinstance(stat, dict):
+        return None
+    nested = stat.get("stat") if isinstance(stat.get("stat"), dict) else stat
+    for key in ("total", "attempts", "max"):
+        value = nested.get(key)
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str) and value.strip().replace(".", "", 1).isdigit():
+            return float(value)
+    return None
+
+
+def _capture(raw_key: str, stat: Any, out: dict[str, Any]) -> None:
+    value = _stat_value(stat)
+    if value is not None:
+        out[raw_key] = value
+    if raw_key in PASS_RATIO_KEYS:
+        total = _stat_total(stat)
+        if total is not None:
+            out[f"{raw_key}__total"] = total
+
+
 def _collect_stats(node: Any, out: dict[str, Any]) -> None:
     if isinstance(node, dict):
         key = node.get("key")
         if isinstance(key, str) and key in TARGET_KEYS:
-            value = _stat_value(node)
-            if value is not None:
-                out[key] = value
+            _capture(key, node, out)
         for label, value in node.items():
             if isinstance(value, dict):
                 raw_key = value.get("key")
                 if isinstance(raw_key, str) and raw_key in TARGET_KEYS:
-                    stat_value = _stat_value(value)
-                    if stat_value is not None:
-                        out[raw_key] = stat_value
+                    _capture(raw_key, value, out)
                 elif label in TARGET_KEYS:
-                    stat_value = _stat_value(value)
-                    if stat_value is not None:
-                        out[label] = stat_value
+                    _capture(label, value, out)
             _collect_stats(value, out)
     elif isinstance(node, list):
         for item in node:
@@ -180,13 +181,19 @@ def _player_name(value: Any) -> str:
 
 
 def _identity_key(name: str, team: str | None) -> tuple[str, str]:
-    normalized_name = " ".join(name.casefold().split())
-    normalized_team = " ".join((team or "").casefold().split())
-    return normalized_name, normalized_team
+    return " ".join(name.casefold().split()), " ".join((team or "").casefold().split())
+
+
+def _display_stats(raw: dict[str, Any]) -> dict[str, Any]:
+    stats = {TARGET_KEYS[key]: value for key, value in raw.items() if key in TARGET_KEYS}
+    for raw_key in PASS_RATIO_KEYS:
+        total_key = f"{raw_key}__total"
+        if total_key in raw:
+            stats[f"{TARGET_KEYS[raw_key]} Total"] = raw[total_key]
+    return stats
 
 
 def _extract_explicit_player_stats(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Parse the canonical content.playerStats map used by current FotMob pages."""
     content = _page_props(payload).get("content") or {}
     player_stats = content.get("playerStats") or {}
     if not isinstance(player_stats, dict):
@@ -197,26 +204,17 @@ def _extract_explicit_player_stats(payload: dict[str, Any]) -> list[dict[str, An
             continue
         stats: dict[str, Any] = {}
         _collect_stats(player.get("stats") or [], stats)
-        if not stats:
+        if not any(key in TARGET_KEYS for key in stats):
             continue
-        rows.append({
-            "id": str(player.get("id") or fallback_id),
-            "name": _player_name(player.get("name")),
-            "team": player.get("teamName"),
-            "raw_keys": stats,
-            "stats": {TARGET_KEYS[key]: value for key, value in stats.items() if key in TARGET_KEYS},
-        })
+        rows.append({"id": str(player.get("id") or fallback_id), "name": _player_name(player.get("name")), "team": player.get("teamName"), "raw_keys": stats, "stats": _display_stats(stats)})
     return rows
 
 
 def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Extract target stats, preferring FotMob's explicit playerStats structure."""
     explicit = _extract_explicit_player_stats(payload)
     if explicit:
         return explicit
-
     rows_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
-
     def walk(node: Any, team: str | None = None) -> None:
         if isinstance(node, dict):
             local_team = team
@@ -225,19 +223,16 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 local_team = _player_name(team_obj.get("name"))
             elif isinstance(node.get("teamName"), str):
                 local_team = node["teamName"]
-
             name = _player_name(node.get("name"))
             player_id = node.get("id", node.get("playerId", node.get("player_id")))
             if name and player_id is not None:
                 stats: dict[str, Any] = {}
                 _collect_stats(node, stats)
-                if stats:
+                if any(key in TARGET_KEYS for key in stats):
                     identity = _identity_key(name, local_team)
                     existing = rows_by_identity.get(identity)
                     if existing is None:
-                        rows_by_identity[identity] = {
-                            "id": str(player_id), "name": name, "team": local_team, "raw_keys": dict(stats)
-                        }
+                        rows_by_identity[identity] = {"id": str(player_id), "name": name, "team": local_team, "raw_keys": dict(stats)}
                     else:
                         existing.setdefault("raw_keys", {}).update(stats)
             for value in node.values():
@@ -245,12 +240,10 @@ def extract_player_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
         elif isinstance(node, list):
             for item in node:
                 walk(item, team)
-
     walk(payload)
     rows: list[dict[str, Any]] = []
     for row in rows_by_identity.values():
-        raw_keys = row.get("raw_keys", {})
-        row["stats"] = {TARGET_KEYS[key]: value for key, value in raw_keys.items() if key in TARGET_KEYS}
+        row["stats"] = _display_stats(row.get("raw_keys", {}))
         rows.append(row)
     return rows
 
@@ -260,15 +253,4 @@ def diagnostic(match_id: str, match_url: str | None = None) -> dict[str, Any]:
     rows = extract_player_rows(payload)
     page_props = _page_props(payload)
     content = page_props.get("content") or {}
-    return {
-        "source": "FotMob",
-        "match_id": str(match_id),
-        "production_values_changed": False,
-        "target_keys": TARGET_KEYS,
-        "players": rows,
-        "debug": {
-            "has_content": bool(content),
-            "has_player_stats": bool(content.get("playerStats")) if isinstance(content, dict) else False,
-            "player_count": len(rows),
-        },
-    }
+    return {"source": "FotMob", "match_id": str(match_id), "production_values_changed": False, "target_keys": TARGET_KEYS, "players": rows, "debug": {"has_content": bool(content), "has_player_stats": bool(content.get("playerStats")) if isinstance(content, dict) else False, "player_count": len(rows)}}
