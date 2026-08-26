@@ -40,8 +40,6 @@ function syncRankZeroVisibility() {
     restore.forEach(label => { const row = byLabel.get(label); if (row?.classList.contains('stat-editor-row--hidden')) row.querySelector<HTMLButtonElement>('.visibility-button')?.click(); });
     return;
   }
-  // Auto-remove zero rows only during the initial Rank Order pass. Once that
-  // pass is complete every eye toggle is user-controlled, including zero stats.
   if (!rankAutoHidePending) return;
   const zeroLabels = playerGraphicRows().filter(row => graphicLabel(row) !== 'Minutes Played' && numericValue(row) === 0).map(graphicLabel);
   if (!zeroLabels.length) { rankAutoHidePending = false; return; }
@@ -139,6 +137,13 @@ function apiOrigin(): string {
   if (image?.src) { try { return new URL(image.src).origin; } catch { /* fall through */ } }
   return 'http://localhost:8000';
 }
+function renderMetaParts(meta: HTMLElement, parts: string[]) {
+  meta.replaceChildren();
+  parts.forEach((part, index) => {
+    if (index > 0) { const separator = document.createElement('span'); separator.textContent = '|'; meta.append(' ', separator, ' '); }
+    meta.append(part);
+  });
+}
 async function addMatchDate() {
   const meta = document.querySelector<HTMLElement>('.player-graphic .player-meta');
   if (!meta || meta.dataset.matchDateAdded === '1') return;
@@ -151,7 +156,17 @@ async function addMatchDate() {
     } catch { return; }
   }
   if (!date || meta.dataset.matchDateAdded === '1') return;
-  const separator = document.createElement('span'); separator.textContent = '|'; meta.append(' ', separator, ` ${date}`); meta.dataset.matchDateAdded = '1';
+  const parts = text(meta).split('|').map(part => part.trim()).filter(Boolean);
+  const isLeaders = Boolean(meta.closest('.leaders-graphic'));
+  if (isLeaders) {
+    if (!parts.includes(date)) parts.push(date);
+  } else if (parts.length >= 3) {
+    parts[parts.length - 1] = date;
+  } else {
+    parts.push(date);
+  }
+  renderMetaParts(meta, parts);
+  meta.dataset.matchDateAdded = '1';
 }
 
 function enhance() {
