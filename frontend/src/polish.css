@@ -18,7 +18,7 @@
 /* Player page polish — match the approved reference composition */
 .player-graphic:not(.leaders-graphic) .player-header { padding-top: 42px; padding-bottom: 28px; }
 .player-graphic:not(.leaders-graphic) .matchup__title { font-size: 31.2px; }
-.player-graphic:not(.leaders-graphic) .matchup__meta { font-size: 22px; }
+.player-graphic:not(.leaders-graphic) .matchup__meta { font-size: 22.5px; }
 .player-graphic:not(.leaders-graphic) .player-stats-panel { position: absolute; top: 278px; bottom: 112px; left: 0; right: 0; padding: 0 88px; display: flex; align-items: center; }
 .player-graphic:not(.leaders-graphic) .player-stats-list { width: 100%; gap: 6px; }
 .player-graphic:not(.leaders-graphic) .player-stat-row { position: relative; min-height: 42.4px; }
@@ -31,10 +31,10 @@
 /* Leaders page — reproduce the supplied reference layout */
 .leaders-header { padding-top: 42px; padding-bottom: 28px; }
 .leaders-graphic .matchup__title { font-size: 31.2px; }
-.leaders-graphic .matchup__meta { font-size: 22px; }
-.leaders-team-pair { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 auto 16px; }
-.leaders-team-badge { width: 72px; height: 72px; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; }
-.leaders-team-badge img { width: 72px; height: 72px; object-fit: contain; }
+.leaders-graphic .matchup__meta { font-size: 22.5px; }
+.leaders-team-pair { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 auto 16px; }
+.leaders-team-badge { width: 82.8px; height: 82.8px; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; }
+.leaders-team-badge img { width: 82.8px; height: 82.8px; object-fit: contain; }
 .leaders-graphic .player-stats-panel { position: absolute; top: 274px; bottom: 104px; left: 0; right: 0; padding: 0 70px; display: flex; align-items: flex-start; }
 .leaders-graphic .player-stats-list { width: 100%; margin-top: 0; gap: 6px; }
 .leaders-graphic .leader-stat-row { min-height: 42.4px; }
