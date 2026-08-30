@@ -17,24 +17,31 @@ TARGET_KEYS = {
     "accurate_passes_opposition_half": "Passes in Opposition Half",
     "accurate_passes_own_half": "Passes in Own Half",
     "clearance_off_line": "Clearances Off Line",
-    # FotMob/Opta Vision physical-performance fields. Multiple raw-key aliases are
-    # accepted because FotMob has changed key spelling between payload versions.
     "distance_covered": "Distance covered (km)",
     "distanceCovered": "Distance covered (km)",
     "physical_distance_covered": "Distance covered (km)",
+    "total_distance": "Distance covered (km)",
+    "distance": "Distance covered (km)",
     "number_of_sprints": "Number of sprints",
     "numberOfSprints": "Number of sprints",
     "sprints": "Number of sprints",
+    "sprint_count": "Number of sprints",
     "sprinting": "Sprinting (km)",
     "sprinting_distance": "Sprinting (km)",
     "sprintingDistance": "Sprinting (km)",
+    "sprint_distance": "Sprinting (km)",
+    "sprintDistance": "Sprinting (km)",
 }
 PASS_RATIO_KEYS = {"accurate_passes_opposition_half", "accurate_passes_own_half"}
 PHYSICAL_DISTANCE_LABELS = {"Distance covered (km)", "Sprinting (km)"}
 DISPLAY_LABEL_KEYS = {
     "distance covered": "distance_covered",
+    "distance": "distance_covered",
     "number of sprints": "number_of_sprints",
+    "sprints": "number_of_sprints",
     "sprinting": "sprinting",
+    "sprinting distance": "sprinting_distance",
+    "sprint distance": "sprinting_distance",
 }
 
 
@@ -176,6 +183,9 @@ def _collect_stats(node: Any, out: dict[str, Any]) -> None:
         key = node.get("key")
         if isinstance(key, str) and key in TARGET_KEYS:
             _capture(key, node, out)
+        title_key = _label_key(node.get("title") or node.get("label") or node.get("name"))
+        if title_key:
+            _capture(title_key, node, out)
         for label, value in node.items():
             if isinstance(value, dict):
                 raw_key = value.get("key")
@@ -187,6 +197,12 @@ def _collect_stats(node: Any, out: dict[str, Any]) -> None:
                     canonical_key = _label_key(label)
                     if canonical_key:
                         _capture(canonical_key, value, out)
+            elif label in TARGET_KEYS:
+                _capture(label, value, out)
+            else:
+                canonical_key = _label_key(label)
+                if canonical_key and isinstance(value, (int, float, str)):
+                    _capture(canonical_key, value, out)
             _collect_stats(value, out)
     elif isinstance(node, list):
         for item in node:
@@ -223,11 +239,10 @@ def _to_km(value: Any) -> Any:
             return round(number, 3)
         if re.search(r"\bm\b", text):
             return round(number / 1000.0, 3)
-        # FotMob's embedded physical match values are metres even though the UI
-        # presents larger totals as km.
-        return round(number / 1000.0, 3)
+        return round(number / 1000.0, 3) if abs(number) > 100 else round(number, 3)
     if isinstance(value, (int, float)):
-        return round(float(value) / 1000.0, 3)
+        number = float(value)
+        return round(number / 1000.0, 3) if abs(number) > 100 else round(number, 3)
     return value
 
 
@@ -255,7 +270,9 @@ def _extract_explicit_player_stats(payload: dict[str, Any]) -> list[dict[str, An
         if not isinstance(player, dict):
             continue
         stats: dict[str, Any] = {}
-        _collect_stats(player.get("stats") or [], stats)
+        # Physical tracking fields can be siblings of the normal stats array.
+        # Scan the full player object so we do not stop after finding event stats.
+        _collect_stats(player, stats)
         if not any(key in TARGET_KEYS for key in stats):
             continue
         rows.append({"id": str(player.get("id") or fallback_id), "name": _player_name(player.get("name")), "team": player.get("teamName"), "raw_keys": stats, "stats": _display_stats(stats)})
