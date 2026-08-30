@@ -25,6 +25,7 @@ for _metric in _NEW_METRICS:
     else:
         existing.update(dict(_metric))
     golden_metrics.REQUIRED_PLAYER_LABELS.add(_metric["label"])
+golden_metrics.REQUIRED_PLAYER_LABELS.add("xG")
 
 _FOTMOB_FIELDS = {
     "Opposition Box Touches": "touchesInOppBox",
@@ -149,8 +150,9 @@ def _preserving_import_sofascore(req):
 
 main.import_sofascore = _preserving_import_sofascore
 
-# Native SofaScore half-pass rows remain explicitly guaranteed for older local
-# payloads and for Player toggle/ranking controls.
+# Explicitly guarantee the rows whose provider feeds can legitimately omit a
+# zero-valued field. This keeps Player Stats/toggles stable without duplicating
+# metric definitions.
 _base_build_rows = main.build_canonical_player_rows
 
 def _number(value: Any) -> float | None:
@@ -170,33 +172,41 @@ def _ratio_text(value: float, total: float | None) -> str:
     return f"{left}/{right}"
 
 
-def _build_rows_with_half_pass_ratios(stats: dict[str, Any], hide_zero: bool = True):
+def _has_participated(stats: dict[str, Any]) -> bool:
+    minutes = _number(stats.get("minutesPlayed"))
+    if minutes is not None and minutes > 0:
+        return True
+    return any(_number(stats.get(key)) is not None for key in ("touches","totalTouches","totalPass","totalPasses","rating"))
+
+
+def _build_rows_with_guarantees(stats: dict[str, Any], hide_zero: bool = True):
     rows, minutes = _base_build_rows(stats, hide_zero=hide_zero)
+    by_key = {str(row.get("key")): row for row in rows}
     native = (
         ("passes_in_opposition_half", "Passes in Opposition Half", "accurateOppositionHalfPasses", "totalOppositionHalfPasses"),
         ("passes_in_own_half", "Passes in Own Half", "accurateOwnHalfPasses", "totalOwnHalfPasses"),
     )
-    by_key = {str(row.get("key")): row for row in rows}
     for key, label, accurate_key, total_key in native:
         value = _number(stats.get(accurate_key))
         total = _number(stats.get(total_key))
         if value is None:
             continue
-        row = {
-            "key": key,
-            "label": label,
-            "display": _ratio_text(value, total),
-            "rank": value,
-            "value": value,
-        }
+        row = {"key": key,"label": label,"display": _ratio_text(value, total),"rank": value,"value": value}
         if key in by_key:
             by_key[key].update(row)
         else:
-            rows.append(row)
-            by_key[key] = row
+            rows.append(row); by_key[key] = row
+    if "xg" not in by_key and _has_participated(stats):
+        xg = _number(stats.get("expectedGoals"))
+        if xg is None:
+            xg = _number(stats.get("expectedGoalsValue"))
+        if xg is None:
+            xg = 0.0
+        row = {"key":"xg","label":"xG","display":f"{xg:.2f}","rank":xg,"value":xg}
+        rows.append(row); by_key["xg"] = row
     return rows, minutes
 
-main.build_canonical_player_rows = _build_rows_with_half_pass_ratios
+main.build_canonical_player_rows = _build_rows_with_guarantees
 
 import server
 
