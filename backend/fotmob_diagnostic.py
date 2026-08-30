@@ -126,10 +126,15 @@ def fetch_match_details(match_id: str, match_url: str | None = None) -> dict[str
     has_numeric_hash = bool(match_url and re.search(r"#\d+(?::|$)", match_url))
     url = f"https://www.fotmob.com/match/{match_id}" if has_numeric_hash and str(match_id).isdigit() else (match_url or f"https://www.fotmob.com/match/{match_id}")
     response = _get(url); response.raise_for_status(); payload = _next_payload(response.text)
-    if _has_player_stats(payload): return payload
+    # A slug/localized FotMob page can contain ordinary playerStats while the
+    # canonical numeric match page exposes a richer player payload. Previously
+    # we returned here too early, so physical-performance fields never got a
+    # chance to be discovered. Numeric references are already canonical.
+    if _has_player_stats(payload) and str(match_id).isdigit(): return payload
     numeric_id = str(match_id) if str(match_id).isdigit() else (_resolve_numeric_match_id(match_url) if match_url else None)
     if numeric_id:
-        retry = _get(f"https://www.fotmob.com/match/{numeric_id}"); retry.raise_for_status(); return _next_payload(retry.text)
+        retry = _get(f"https://www.fotmob.com/match/{numeric_id}"); retry.raise_for_status(); retry_payload = _next_payload(retry.text)
+        if _has_player_stats(retry_payload): return retry_payload
     return payload
 
 
