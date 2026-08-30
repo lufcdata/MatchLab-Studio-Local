@@ -7,7 +7,7 @@ from typing import Any
 # MatchLab display labels remain separate from SofaScore source fields.
 METRICS: list[dict[str, Any]] = [
     {"label":"Goals","sofascore":"Goals","match_keys":["goals"],"player_keys":["goals"]},
-    {"label":"xG","sofascore":"Expected Goals (xG)","match_aliases":["Expected goals"],"match_keys":["expectedGoals"],"player_keys":["expectedGoals","expectedGoalsValue"]},
+    {"label":"xG","sofascore":"Expected Goals (xG)","match_aliases":["Expected goals"],"match_keys":["expectedGoals"],"player_keys":["expectedGoals","expectedGoalsValue"],"default_zero":True},
     {"label":"Possession","sofascore":"Ball Possession","match_aliases":["Ball possession"],"match_keys":["ballPossession"],"player_keys":["ballPossession","possession"]},
     {"label":"Touches","sofascore":"Touches","match_aliases":["Total touches"],"match_keys":["touches","totalTouches"],"player_keys":["touches","totalTouches"]},
     {"label":"Opposition Box Touches","sofascore":"Penalty Box Touches","match_aliases":["Penalty box touches","Touches in opposition box","Touches in Opposition Box","Touches in penalty area","Touches in penalty box","Touches inside opposition box"],"match_keys":["touchesInOppBox","touchesInOppositionBox","penaltyBoxTouches","touchesInPenaltyArea","touchesInPenaltyBox","touchesInsideOppositionBox"],"player_keys":["touchesInOppBox","touchesInOppositionBox","penaltyBoxTouches","touchesInPenaltyArea","touchesInPenaltyBox","touchesInsideOppositionBox"]},
@@ -23,6 +23,9 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Total Passes","sofascore":"Passes","match_aliases":["Total passes"],"match_keys":["passes","totalPasses"],"player_keys":["totalPass","totalPasses"]},
     {"label":"Passes in Opposition Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOppositionHalfPasses"]},
     {"label":"Passes in Own Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOwnHalfPasses"]},
+    {"label":"Distance covered (km)","sofascore":"FotMob supplement","match_keys":["distanceCoveredKm"],"player_keys":["distanceCoveredKm"]},
+    {"label":"Number of sprints","sofascore":"FotMob supplement","match_keys":["numberOfSprints"],"player_keys":["numberOfSprints"]},
+    {"label":"Sprinting (km)","sofascore":"FotMob supplement","match_keys":["sprintingKm"],"player_keys":["sprintingKm"]},
     {"label":"Successful Final Third Passes","sofascore":"Passes In Final Third","match_aliases":["Passes in final third"],"match_keys":["finalThirdPhaseStatistic","accurateFinalThirdPasses","passesInFinalThird"],"player_keys":["accurateFinalThirdPasses","successfulFinalThirdPasses","passesInFinalThird"]},
     {"label":"Passes Into Final Third","sofascore":"FotMob supplement","match_aliases":["Passes into final third","Final third passes"],"match_keys":["passesIntoFinalThird","totalFinalThirdPasses"],"player_keys":["passesIntoFinalThird","totalFinalThirdPasses"]},
     {"label":"Line-Breaking Passes","sofascore":"FotMob supplement","match_keys":[],"player_keys":["lineBreakingPasses"]},
@@ -57,7 +60,7 @@ METRICS: list[dict[str, Any]] = [
 ]
 
 METRIC_BY_LABEL = {m["label"]: m for m in METRICS}
-REQUIRED_PLAYER_LABELS = {"Opposition Box Touches","Shots Outside Box","Shots Inside The Box","Big Chances Created","Big Chances Missed","Successful Final Third Passes","Passes in Opposition Half","Passes in Own Half","Pass Accuracy","Final Third Entries","Ground Duels Won","Penalties Won","High Claims","Red Cards","Clearances Off Line","Defensive Actions"}
+REQUIRED_PLAYER_LABELS = {"xG","Opposition Box Touches","Shots Outside Box","Shots Inside The Box","Big Chances Created","Big Chances Missed","Successful Final Third Passes","Passes in Opposition Half","Passes in Own Half","Distance covered (km)","Number of sprints","Sprinting (km)","Pass Accuracy","Final Third Entries","Ground Duels Won","Penalties Won","High Claims","Red Cards","Clearances Off Line","Defensive Actions"}
 
 def metric_key(label: str) -> str: return "_".join("".join(ch.lower() if ch.isalnum() else " " for ch in label).split())
 def _norm(value: Any) -> str:
@@ -121,6 +124,7 @@ def player_metric_value(stats: dict[str, Any], metric: dict[str, Any]) -> float 
     return None
 def format_metric_value(value: float, metric: dict[str, Any]) -> str:
     if metric.get("label")=="xG": return f"{value:.2f}"
+    if metric.get("label") in {"Distance covered (km)","Sprinting (km)"}: return f"{value:.2f}"
     text=str(int(value)) if float(value).is_integer() else f"{value:.1f}"; return f"{text}%" if metric.get("suffix")=="%" else text
 def _fraction(value: float, total: float | None) -> str | None:
     if total is None or total < value: return None
