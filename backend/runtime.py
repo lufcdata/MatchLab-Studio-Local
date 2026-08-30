@@ -8,13 +8,15 @@ from typing import Any
 import main
 import golden_metrics
 
-# Additive-only metric extension. Existing Golden metrics are not changed.
-# The two half-pass metrics are native SofaScore lineup fields. Clearances Off
-# Line remains supplementary until a native SofaScore field is established.
+# Additive-only compatibility extension. The authoritative definitions now live
+# in golden_metrics.py; these guards keep older local payloads self-healing.
 _NEW_METRICS = (
     {"label":"Passes in Opposition Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOppositionHalfPasses"]},
     {"label":"Passes in Own Half","sofascore":"SofaScore player statistics","match_keys":[],"player_keys":["accurateOwnHalfPasses"]},
     {"label":"Clearances Off Line","sofascore":"FotMob supplement","match_keys":["clearancesOffLine"],"player_keys":["clearancesOffLine"],"default_zero":True},
+    {"label":"Distance covered (km)","sofascore":"FotMob supplement","match_keys":["distanceCoveredKm"],"player_keys":["distanceCoveredKm"]},
+    {"label":"Number of sprints","sofascore":"FotMob supplement","match_keys":["numberOfSprints"],"player_keys":["numberOfSprints"]},
+    {"label":"Sprinting (km)","sofascore":"FotMob supplement","match_keys":["sprintingKm"],"player_keys":["sprintingKm"]},
 )
 for _metric in _NEW_METRICS:
     existing = next((m for m in main.METRICS if m.get("label") == _metric["label"]), None)
@@ -30,6 +32,13 @@ _FOTMOB_FIELDS = {
     "Line-Breaking Passes": "lineBreakingPasses",
     "Headed Clearances": "headedClearances",
     "Clearances Off Line": "clearancesOffLine",
+    "Distance covered (km)": "distanceCoveredKm",
+    "Number of sprints": "numberOfSprints",
+    "Sprinting (km)": "sprintingKm",
+}
+_ZERO_WHEN_MISSING = {
+    "Opposition Box Touches", "Passes Into Final Third", "Line-Breaking Passes",
+    "Headed Clearances", "Clearances Off Line",
 }
 _FOTMOB_TOTAL_FIELDS: dict[str, str] = {}
 
@@ -50,7 +59,12 @@ def _promote(payload: dict[str, Any]) -> bool:
         stats = player.get("stats") or {}
         if not stats:
             continue
-        values = {label: stats.get(label, 0) for label in _FOTMOB_FIELDS}
+        values: dict[str, Any] = {}
+        for label in _FOTMOB_FIELDS:
+            if label in stats:
+                values[label] = stats[label]
+            elif label in _ZERO_WHEN_MISSING:
+                values[label] = 0
         values.update({label: stats.get(label) for label in _FOTMOB_TOTAL_FIELDS if stats.get(label) is not None})
         by_name[_norm(player.get("name"))] = values
     changed = False
@@ -135,10 +149,8 @@ def _preserving_import_sofascore(req):
 
 main.import_sofascore = _preserving_import_sofascore
 
-# Do not rely on catalogue discovery for these two native SofaScore fields.
-# Inject/replace their canonical Player rows explicitly so they are guaranteed
-# to reach the Player page and its toggle/ranking controls whenever SofaScore
-# supplies the values.
+# Native SofaScore half-pass rows remain explicitly guaranteed for older local
+# payloads and for Player toggle/ranking controls.
 _base_build_rows = main.build_canonical_player_rows
 
 def _number(value: Any) -> float | None:
