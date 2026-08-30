@@ -54,3 +54,8 @@ golden_metrics.player_metric_value = player_metric_value
 golden_metrics.format_metric_value = format_metric_value
 main.player_metric_value = player_metric_value
 main.format_metric_value = format_metric_value
+
+# Performance-only linked-import patch: SofaScore still refreshes on every load,
+# but a validated FotMob supplement is reused for the same match instead of
+# re-downloading and re-parsing FotMob unnecessarily.
+import linked_import_cache  # noqa: E402,F401
