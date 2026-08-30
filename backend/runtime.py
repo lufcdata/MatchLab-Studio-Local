@@ -228,4 +228,10 @@ def _fotmob_match_ref(source: str) -> str:
     raise server.HTTPException(400, "Could not find a FotMob match reference in that URL.")
 
 server._fotmob_match_id = _fotmob_match_ref
+
+# Display physical distance metrics in miles while preserving FotMob's stored
+# kilometre source values. The override patches the shared canonical value
+# boundary consumed by Match Stats, Player Stats and Leaders.
+import physical_units_override  # noqa: E402,F401
+
 app = server.app
