@@ -17,8 +17,25 @@ TARGET_KEYS = {
     "accurate_passes_opposition_half": "Passes in Opposition Half",
     "accurate_passes_own_half": "Passes in Own Half",
     "clearance_off_line": "Clearances Off Line",
+    # FotMob/Opta Vision physical-performance fields. Multiple raw-key aliases are
+    # accepted because FotMob has changed key spelling between payload versions.
+    "distance_covered": "Distance covered (km)",
+    "distanceCovered": "Distance covered (km)",
+    "physical_distance_covered": "Distance covered (km)",
+    "number_of_sprints": "Number of sprints",
+    "numberOfSprints": "Number of sprints",
+    "sprints": "Number of sprints",
+    "sprinting": "Sprinting (km)",
+    "sprinting_distance": "Sprinting (km)",
+    "sprintingDistance": "Sprinting (km)",
 }
 PASS_RATIO_KEYS = {"accurate_passes_opposition_half", "accurate_passes_own_half"}
+PHYSICAL_DISTANCE_LABELS = {"Distance covered (km)", "Sprinting (km)"}
+DISPLAY_LABEL_KEYS = {
+    "distance covered": "distance_covered",
+    "number of sprints": "number_of_sprints",
+    "sprinting": "sprinting",
+}
 
 
 def _get(url: str):
@@ -147,6 +164,13 @@ def _capture(raw_key: str, stat: Any, out: dict[str, Any]) -> None:
             out[f"{raw_key}__total"] = total
 
 
+def _label_key(label: Any) -> str | None:
+    if not isinstance(label, str):
+        return None
+    normal = " ".join(re.sub(r"[^a-z0-9]+", " ", label.casefold()).split())
+    return DISPLAY_LABEL_KEYS.get(normal)
+
+
 def _collect_stats(node: Any, out: dict[str, Any]) -> None:
     if isinstance(node, dict):
         key = node.get("key")
@@ -159,6 +183,10 @@ def _collect_stats(node: Any, out: dict[str, Any]) -> None:
                     _capture(raw_key, value, out)
                 elif label in TARGET_KEYS:
                     _capture(label, value, out)
+                else:
+                    canonical_key = _label_key(label)
+                    if canonical_key:
+                        _capture(canonical_key, value, out)
             _collect_stats(value, out)
     elif isinstance(node, list):
         for item in node:
@@ -184,8 +212,32 @@ def _identity_key(name: str, team: str | None) -> tuple[str, str]:
     return " ".join(name.casefold().split()), " ".join((team or "").casefold().split())
 
 
+def _to_km(value: Any) -> Any:
+    if isinstance(value, str):
+        text = value.strip().casefold().replace(",", "")
+        match = re.search(r"-?\d+(?:\.\d+)?", text)
+        if not match:
+            return value
+        number = float(match.group(0))
+        if "km" in text:
+            return round(number, 3)
+        if re.search(r"\bm\b", text):
+            return round(number / 1000.0, 3)
+        # FotMob's embedded physical match values are metres even though the UI
+        # presents larger totals as km.
+        return round(number / 1000.0, 3)
+    if isinstance(value, (int, float)):
+        return round(float(value) / 1000.0, 3)
+    return value
+
+
 def _display_stats(raw: dict[str, Any]) -> dict[str, Any]:
-    stats = {TARGET_KEYS[key]: value for key, value in raw.items() if key in TARGET_KEYS}
+    stats: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key not in TARGET_KEYS:
+            continue
+        label = TARGET_KEYS[key]
+        stats[label] = _to_km(value) if label in PHYSICAL_DISTANCE_LABELS else value
     for raw_key in PASS_RATIO_KEYS:
         total_key = f"{raw_key}__total"
         if total_key in raw:
