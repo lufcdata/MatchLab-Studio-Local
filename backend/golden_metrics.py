@@ -46,6 +46,7 @@ METRICS: list[dict[str, Any]] = [
     {"label":"Clearances","sofascore":"Clearances","match_keys":["totalClearance","clearances"],"player_keys":["totalClearance","clearances"]},
     {"label":"Headed Clearances","sofascore":"FotMob supplement","match_keys":[],"player_keys":["headedClearances"]},
     {"label":"Clearances Off Line","sofascore":"FotMob supplement","match_keys":["clearancesOffLine"],"player_keys":["clearancesOffLine"],"default_zero":True},
+    {"label":"Free-Kicks","sofascore":"Was Fouled","match_aliases":["Was fouled","Free kicks","Free kicks awarded"],"match_keys":["wasFouled"],"player_keys":["wasFouled"]},
     {"label":"Fouls","sofascore":"Fouls","match_keys":["fouls"],"player_keys":["fouls"]},
     {"label":"Fouled","sofascore":"Was Fouled","match_aliases":["Was fouled"],"match_keys":["wasFouled"],"player_keys":["wasFouled"]},
     {"label":"Possession Lost","sofascore":"Possession Lost","match_aliases":["Possession lost"],"match_keys":["possessionLost"],"player_keys":["possessionLostCtrl","possessionLost"]},
