@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 import server
+
+RECENT_MATCH_REFRESH_HOURS = 6
 
 
 def _stored_fotmob(event_id: str) -> dict[str, Any] | None:
@@ -30,8 +33,29 @@ def _same_fotmob_reference(requested: str, stored: dict[str, Any]) -> bool:
         return requested.rstrip("/").casefold() == stored_source.rstrip("/").casefold()
 
 
+def _match_start_timestamp(payload: dict[str, Any]) -> float | None:
+    basic = payload.get("basic") or {}
+    event = basic.get("event") if isinstance(basic, dict) else None
+    if not isinstance(event, dict):
+        event = basic if isinstance(basic, dict) else {}
+    value = event.get("startTimestamp") if isinstance(event, dict) else None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _recent_match_needs_live_fotmob(payload: dict[str, Any]) -> bool:
+    """Avoid freezing partially-populated FotMob physical data just after full time."""
+    start = _match_start_timestamp(payload)
+    if start is None:
+        return False
+    now = datetime.now(timezone.utc).timestamp()
+    return start <= now <= start + (RECENT_MATCH_REFRESH_HOURS * 3600)
+
+
 def import_linked_cached(req: server.LinkedImportRequest):
-    """Refresh SofaScore, but reuse a validated per-match FotMob supplement when possible."""
+    """Refresh SofaScore and reuse FotMob only once a match is outside the live-settling window."""
     requested_event_id = server._sofascore_event_id(req.sofascore_source)
     previous_fotmob = _stored_fotmob(requested_event_id) if requested_event_id else None
 
@@ -43,8 +67,13 @@ def import_linked_cached(req: server.LinkedImportRequest):
     requested_fotmob_source = (req.fotmob_source or "").strip()
     promoted_counts: dict[str, int] = {}
     reused_fotmob = False
+    recent_match_refresh = _recent_match_needs_live_fotmob(payload)
 
-    if previous_fotmob and _same_fotmob_reference(requested_fotmob_source, previous_fotmob):
+    if (
+        previous_fotmob
+        and not recent_match_refresh
+        and _same_fotmob_reference(requested_fotmob_source, previous_fotmob)
+    ):
         cached_players = previous_fotmob.get("players") or []
         if cached_players:
             promoted_counts = server._promote_validated_fotmob_fields(payload, cached_players)
@@ -75,6 +104,7 @@ def import_linked_cached(req: server.LinkedImportRequest):
             "validated_fields": fotmob.get("validated_fields", []),
             "promoted_player_counts": promoted_counts,
             "fotmob_reused": reused_fotmob,
+            "fotmob_recent_refresh": recent_match_refresh,
         },
     }
 
