@@ -55,6 +55,12 @@ golden_metrics.format_metric_value = format_metric_value
 main.player_metric_value = player_metric_value
 main.format_metric_value = format_metric_value
 
+# Provider identity normalisation: exact names remain first choice, with a safe
+# unique-surname fallback for provider spelling/diacritic/first-name variants.
+# This keeps the player-level FotMob supplement complete before Match Stats,
+# Player Stats and Leaders consume it.
+import fotmob_identity_override  # noqa: E402,F401
+
 # Performance-only linked-import patch: SofaScore still refreshes on every load,
 # but a validated FotMob supplement is reused for the same match instead of
 # re-downloading and re-parsing FotMob unnecessarily.
