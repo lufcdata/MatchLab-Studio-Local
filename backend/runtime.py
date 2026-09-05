@@ -234,4 +234,8 @@ server._fotmob_match_id = _fotmob_match_ref
 # boundary consumed by Match Stats, Player Stats and Leaders.
 import physical_units_override  # noqa: E402,F401
 
+# Read-only forensic endpoint used to compare stored FotMob rows, a fresh fetch,
+# and promoted lineup rows for physical distance debugging.
+import physical_distance_audit  # noqa: E402,F401
+
 app = server.app
