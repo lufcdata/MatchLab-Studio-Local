@@ -69,3 +69,7 @@ import fotmob_identity_override  # noqa: E402,F401
 # but a validated FotMob supplement is reused for the same match instead of
 # re-downloading and re-parsing FotMob unnecessarily.
 import linked_import_cache  # noqa: E402,F401
+
+# Read-only diagnostics for forensic comparison of stored FotMob rows, a fresh
+# FotMob fetch and the promoted SofaScore lineup. This does not mutate metrics.
+import physical_distance_audit  # noqa: E402,F401
