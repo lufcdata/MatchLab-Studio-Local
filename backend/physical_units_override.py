@@ -65,11 +65,11 @@ import fotmob_extraction_override  # noqa: E402,F401
 # Player Stats and Leaders consume it.
 import fotmob_identity_override  # noqa: E402,F401
 
+# Read-only forensic endpoint used to compare stored, freshly fetched and
+# promoted physical-distance rows without changing production metric values.
+import physical_distance_audit  # noqa: E402,F401
+
 # Performance-only linked-import patch: SofaScore still refreshes on every load,
 # but a validated FotMob supplement is reused for the same match instead of
 # re-downloading and re-parsing FotMob unnecessarily.
 import linked_import_cache  # noqa: E402,F401
-
-# Read-only diagnostics for forensic comparison of stored FotMob rows, a fresh
-# FotMob fetch and the promoted SofaScore lineup. This does not mutate metrics.
-import physical_distance_audit  # noqa: E402,F401
